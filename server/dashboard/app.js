@@ -22,9 +22,7 @@ function renderTranscript(snapshot, events) {
   }
 
   requestAnimationFrame(() => {
-    const last = el.lastElementChild;
-    if (last) last.scrollIntoView({ block: "end", behavior: "smooth" });
-    else el.scrollTop = el.scrollHeight;
+    ChronosUI.maybeAutoScrollTranscript(el, ChronosUI.transcriptMessageCount(snapshot, events));
   });
 }
 
@@ -39,7 +37,7 @@ function renderIncident(inc, snap) {
   inc._planDisplay = (snap.sop_plan && snap.sop_plan.protocol_title) || "";
   $("incident").innerHTML = ChronosUI.renderIncidentCompactHtml(inc);
 
-  const prog = ChronosUI.checklistProgress(snap.checklist);
+  const prog = ChronosUI.checklistProgress(snap);
   const progEl = $("incident-progress");
   if (prog.total > 0) {
     progEl.style.display = "block";
@@ -64,13 +62,19 @@ function renderIncident(inc, snap) {
 
 function renderDispatches(snapshot) {
   const el = $("dispatches");
+  const panel = $("panel-dispatches");
   if (!el) return;
   const disp = snapshot.dispatches || [];
-  el.innerHTML = ChronosUI.renderDispatchesHtml(snapshot);
-  el.closest(".panel")?.style && (el.closest(".panel").style.display = disp.length ? "block" : "none");
+  if (!disp.length) {
+    el.innerHTML = "";
+    if (panel) panel.style.display = "none";
+    return;
+  }
+  el.innerHTML = ChronosUI.renderDispatchAlertHtml(snapshot);
+  if (panel) panel.style.display = "block";
 }
 
-function renderChecklist(snapshot) {
+function renderChecklist(snapshot, events) {
   const el = $("checklist");
   const plan = snapshot.sop_plan;
   const hint = $("checklist-hint");
@@ -78,7 +82,8 @@ function renderChecklist(snapshot) {
   else if (plan && plan.protocol_title) hint.textContent = plan.protocol_title + " · values update live";
   else hint.textContent = "checklist + captured facts";
 
-  el.innerHTML = ChronosUI.renderMergedIntakeHtml(snapshot, snapshot.recommended_slot);
+  snapshot._events = events || [];
+  el.innerHTML = ChronosUI.renderSopIntakeTable(snapshot, snapshot.recommended_slot);
   if (!el.innerHTML) el.innerHTML = '<div class="empty">Waiting for incident classification…</div>';
 }
 
@@ -265,7 +270,7 @@ async function tick() {
     $("conn-text").textContent = health.live_call ? `live: ${health.live_call}` : "idle";
     renderTranscript(snap, events);
     renderIncident(snap.incident, snap);
-    renderChecklist(snap);
+    renderChecklist(snap, events);
     renderDispatches(snap);
     renderNextQuestion(snap);
     renderMemory(snap);

@@ -52,7 +52,7 @@ const ChronosUI = (() => {
     caller_safety: ["safety:caller_status"],
     trapped_person_status: ["third_party:persons_at_risk", "third_party:trapped_person", "victim:trapped"],
     last_known_location: ["third_party:last_known_location", "location:last_known"],
-    callback_number: ["contact:callback_number", "contact:caller_name"],
+    callback_number: ["contact:callback_number", "contact:callback_phone", "contact:phone", "contact:phone_number"],
     weapon_info: ["threat:weapon_type"],
     threat_description: ["threat:threat_type"],
     suspect_location: ["threat:suspect_location"],
@@ -104,6 +104,37 @@ const ChronosUI = (() => {
     return null;
   }
 
+  function extractPhoneFromText(text) {
+    if (!text) return null;
+    const chunkRe = /(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}|\d{10,}/g;
+    const chunks = String(text).match(chunkRe) || [];
+    for (let i = chunks.length - 1; i >= 0; i--) {
+      const digits = chunks[i].replace(/\D/g, "");
+      if (digits.length >= 10) {
+        const d =
+          digits.length >= 11 && digits[0] === "1" ? digits.slice(-10) : digits.slice(-10);
+        if (d.length === 10) return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+        return digits;
+      }
+    }
+    const compact = String(text).replace(/\s/g, "");
+    const m = compact.match(/\d{10,}/);
+    return m ? m[0] : null;
+  }
+
+  function phoneFromSnapshot(snap) {
+    const texts = [];
+    for (const t of snap.turns || []) texts.push(t);
+    for (const e of snap._events || []) {
+      if (e.event_type === "final_transcript" && e.data && e.data.text) texts.push(e.data.text);
+    }
+    for (let i = texts.length - 1; i >= 0; i--) {
+      const p = extractPhoneFromText(texts[i]);
+      if (p) return p;
+    }
+    return extractPhoneFromText(texts.join(" "));
+  }
+
   function slotValueFromState(slot, snap) {
     const inc = snap.incident || {};
     if (slot === "exact_location" || slot === "location") {
@@ -124,13 +155,37 @@ const ChronosUI = (() => {
     if (slot === "trapped_person_status" && inc.third_party_risk === "resolved") {
       return "All persons accounted for";
     }
+    if (slot === "callback_number") {
+      return phoneFromSnapshot(snap);
+    }
+    if (slot === "breathing" && (inc.hazards || []).includes("breathing")) {
+      return "Breathing difficulty reported";
+    }
+    if (slot === "consciousness" && inc.caller_safety === "at_risk") {
+      return "Caller reports symptoms / at risk";
+    }
     return null;
   }
 
+  const GENERIC_SLOT_VALUES =
+    /^(weapon mentioned|injuries reported|injury reported|breathing difficulty|confirmed|provided|yes|unknown|break-in \/ intruder at door)$/i;
+
+  function isGenericSlotValue(val) {
+    if (!val) return true;
+    const s = String(val).trim();
+    if (!s || GENERIC_SLOT_VALUES.test(s)) return true;
+    const low = s.toLowerCase();
+    return low.endsWith(" mentioned") || low.endsWith(" reported");
+  }
+
   function slotKnownValue(slot, snap, noteMap) {
+    const displays = snap.slot_display_values || {};
+    if (displays[slot] && !isGenericSlotValue(displays[slot])) return displays[slot];
     const fromNotes = lookupNoteValue(SLOT_NOTE_KEYS[slot] || [], noteMap);
-    if (fromNotes) return fromNotes;
-    return slotValueFromState(slot, snap);
+    if (fromNotes && !isGenericSlotValue(fromNotes)) return fromNotes;
+    const fromState = slotValueFromState(slot, snap);
+    if (fromState && !isGenericSlotValue(fromState)) return fromState;
+    return null;
   }
 
   function noteKeysForSlot(slot) {
@@ -171,8 +226,64 @@ const ChronosUI = (() => {
     return used;
   }
 
+  function resolveChecklistItems(snap) {
+    const items = (snap.checklist || []).filter((c) => c.active);
+    if (items.length) return items;
+    const plan = snap.sop_plan;
+    const inc = snap.incident || {};
+    if (!plan || !Array.isArray(plan.slots) || !inc.incident_type) return [];
+    const resolved = new Set(inc.resolved_slots || []);
+    return plan.slots.map((s) => ({
+      slot: s.id,
+      label: s.label || String(s.id).replace(/_/g, " "),
+      question: s.question,
+      priority: s.priority || 99,
+      category: s.category || "general",
+      resolved: resolved.has(s.id),
+      active: true,
+    }));
+  }
+
+  function renderSopIntakeTable(snap, recommendedSlot) {
+    const checklist = resolveChecklistItems(snap);
+    if (!checklist.length) {
+      if (snap.incident && snap.incident.incident_type) {
+        return '<div class="empty">Building SOP checklist for this protocol…</div>';
+      }
+      return '<div class="empty">Waiting for incident classification…</div>';
+    }
+
+    const noteMap = buildNoteMap(snap.structured_notes);
+    const sorted = [...checklist].sort((a, b) => {
+      const ai = CHECKLIST_ORDER.indexOf(a.category || "general");
+      const bi = CHECKLIST_ORDER.indexOf(b.category || "general");
+      if (ai !== bi) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      return (a.priority || 99) - (b.priority || 99);
+    });
+
+    const rows = sorted
+      .map((c) => {
+        const isRec = c.slot === recommendedSlot;
+        const known =
+          slotKnownValue(c.slot, snap, noteMap) || lookupNoteValue(SLOT_NOTE_KEYS[c.slot] || [], noteMap);
+        const status = c.resolved ? "Done" : isRec ? "Next" : "Open";
+        const rowCls = ["sop-row", c.resolved ? "done" : "", isRec ? "rec" : ""].filter(Boolean).join(" ");
+        const mark = c.resolved ? "✓" : isRec ? "▶" : "○";
+        let valueCell;
+        if (known && !isGenericSlotValue(known)) {
+          valueCell = `<span class="intake-val" title="Latest captured value">${esc(known)}</span>`;
+        } else {
+          valueCell = `<span class="intake-q">${esc(c.question)}</span>`;
+        }
+        return `<tr class="${rowCls}"><td class="sop-status">${mark} ${status}</td><td class="sop-label">${esc(c.label || c.slot)}</td><td class="intake-cell">${valueCell}</td></tr>`;
+      })
+      .join("");
+
+    return `<div class="sop-table-wrap"><table class="sop-table intake-table"><thead><tr><th>Status</th><th>Data point</th><th>Known / ask</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
   function renderMergedIntakeHtml(snap, recommendedSlot) {
-    const checklist = (snap.checklist || []).filter((c) => c.active);
+    const checklist = resolveChecklistItems(snap);
     const noteMap = buildNoteMap(snap.structured_notes);
     const consumed = consumedNoteKeys(checklist, snap, noteMap);
 
@@ -190,17 +301,17 @@ const ChronosUI = (() => {
 
     let rows = sorted
       .map((c) => {
-        const meta = CATEGORY_META[c.category] || CATEGORY_META.general;
         const isRec = c.slot === recommendedSlot;
         const known =
           slotKnownValue(c.slot, snap, noteMap) || lookupNoteValue(SLOT_NOTE_KEYS[c.slot] || [], noteMap);
         const status = c.resolved ? "Done" : isRec ? "Next" : "Open";
         const rowCls = ["sop-row", c.resolved ? "done" : "", isRec ? "rec" : ""].filter(Boolean).join(" ");
         const mark = c.resolved ? "✓" : isRec ? "▶" : "○";
-        const valueCell = known
-          ? `<span class="intake-val" title="Latest captured value">${esc(known)}</span>`
-          : `<span class="intake-q">${esc(c.question)}</span>`;
-        return `<tr class="${rowCls}"><td class="sop-status">${mark} ${status}</td><td class="sop-cat">${meta.icon} ${esc(meta.label)}</td><td class="sop-label">${esc(c.label || c.slot)}</td><td class="intake-cell">${valueCell}</td></tr>`;
+        const valueCell =
+          known && !isGenericSlotValue(known)
+            ? `<span class="intake-val" title="Latest captured value">${esc(known)}</span>`
+            : `<span class="intake-q">${esc(c.question)}</span>`;
+        return `<tr class="${rowCls}"><td class="sop-status">${mark} ${status}</td><td class="sop-label">${esc(c.label || c.slot)}</td><td class="intake-cell">${valueCell}</td></tr>`;
       })
       .join("");
 
@@ -215,13 +326,12 @@ const ChronosUI = (() => {
     });
 
     for (const n of extraNotes) {
-      const meta = CATEGORY_META[n.category] || CATEGORY_META.general;
-      rows += `<tr class="sop-row extra"><td class="sop-status">✓ Fact</td><td class="sop-cat">${meta.icon} ${esc(meta.label)}</td><td class="sop-label">${esc(n.field.replace(/_/g, " "))}</td><td class="intake-cell"><span class="intake-val">${esc(n.value)}</span></td></tr>`;
+      rows += `<tr class="sop-row extra"><td class="sop-status">✓ Fact</td><td class="sop-label">${esc(n.field.replace(/_/g, " "))}</td><td class="intake-cell"><span class="intake-val">${esc(n.value)}</span></td></tr>`;
     }
 
     if (!rows) return '<div class="empty">Waiting for incident classification…</div>';
 
-    return `<div class="sop-table-wrap"><table class="sop-table intake-table"><thead><tr><th>Status</th><th>Category</th><th>Data point</th><th>Known / ask</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<div class="sop-table-wrap"><table class="sop-table intake-table"><thead><tr><th>Status</th><th>Data point</th><th>Known / ask</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
   const MEMORY_ICONS = {
@@ -334,14 +444,37 @@ const ChronosUI = (() => {
   }
 
   function renderDispatchesHtml(snap) {
+    const html = renderDispatchAlertHtml(snap);
+    if (html) return html;
+    return '<div class="empty">Units dispatch when location + incident type are known.</div>';
+  }
+
+  const DISPATCH_UNIT_META = {
+    fire: { icon: "🚒", headline: "Fire department dispatched", short: "FIRE" },
+    police: { icon: "🚔", headline: "Police dispatched", short: "POLICE" },
+    ems: { icon: "🚑", headline: "Ambulance / EMS dispatched", short: "EMS" },
+  };
+
+  function renderDispatchAlertHtml(snap) {
     const dispatches = snap.dispatches || [];
-    if (!dispatches.length) return '<div class="empty">Units dispatch when location + incident type are known.</div>';
-    const icons = { fire: "🚒", police: "🚔", ems: "🚑" };
+    if (!dispatches.length) return "";
     return dispatches
-      .map(
-        (d) =>
-          `<div class="dispatch-chip"><span class="d-ico">${icons[d.unit_type] || "📡"}</span><span class="d-type">${esc((d.unit_type || "").toUpperCase())}</span><span class="d-loc">${esc(d.location || "—")}</span><span class="d-reason">${esc(d.reason || "")}</span></div>`
-      )
+      .map((d) => {
+        const meta = DISPATCH_UNIT_META[d.unit_type] || {
+          icon: "📡",
+          headline: "Unit dispatched",
+          short: (d.unit_type || "unit").toUpperCase(),
+        };
+        return `<div class="dispatch-alert-unit dispatch-alert-${esc(d.unit_type || "unit")}">
+      <div class="da-icon" aria-hidden="true">${meta.icon}</div>
+      <div class="da-copy">
+        <div class="da-headline">${esc(meta.headline)}</div>
+        <div class="da-status">● SIMULATED · EN ROUTE</div>
+        <div class="da-loc">${esc(d.location || "—")}</div>
+        ${d.reason ? `<div class="da-reason">${esc(d.reason)}</div>` : ""}
+      </div>
+    </div>`;
+      })
       .join("");
   }
 
@@ -407,10 +540,49 @@ const ChronosUI = (() => {
     return chips.join("");
   }
 
-  function checklistProgress(checklist) {
-    const items = (checklist || []).filter((c) => c.active);
+  function checklistProgress(checklistOrSnap) {
+    const items = Array.isArray(checklistOrSnap)
+      ? (checklistOrSnap || []).filter((c) => c.active)
+      : resolveChecklistItems(checklistOrSnap || {});
     const done = items.filter((c) => c.resolved).length;
     return { done, total: items.length, pct: items.length ? Math.round((done / items.length) * 100) : 0 };
+  }
+
+  function transcriptMessageCount(snap, events) {
+    let n = 0;
+    for (const ev of events || []) {
+      if (
+        ev.event_type === "final_transcript" ||
+        ev.event_type === "agent_guidance" ||
+        ev.event_type === "background_speech"
+      ) {
+        n++;
+      }
+    }
+    if (!n && snap.turns) n = snap.turns.length;
+    return n;
+  }
+
+  function bindTranscriptScroll(el) {
+    if (!el || el.dataset.scrollBound === "1") return;
+    el.dataset.scrollBound = "1";
+    el.dataset.scrollPinned = "true";
+    el.addEventListener("scroll", () => {
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      el.dataset.scrollPinned = dist < 64 ? "true" : "false";
+    });
+  }
+
+  function maybeAutoScrollTranscript(el, messageCount) {
+    if (!el) return;
+    bindTranscriptScroll(el);
+    const prev = parseInt(el.dataset.msgCount || "0", 10);
+    el.dataset.msgCount = String(messageCount);
+    if (messageCount <= prev) return;
+    if (el.dataset.scrollPinned === "false") return;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
   }
 
   return {
@@ -419,13 +591,19 @@ const ChronosUI = (() => {
     protocolTitle,
     riskClass,
     renderTranscriptHtml,
+    transcriptMessageCount,
+    bindTranscriptScroll,
+    maybeAutoScrollTranscript,
     renderChecklistGrouped,
     renderChecklistTable,
     renderChecklistFlat,
     renderMemoryHtml,
     renderStructuredNotesHtml,
     renderMergedIntakeHtml,
+    renderSopIntakeTable,
+    resolveChecklistItems,
     renderDispatchesHtml,
+    renderDispatchAlertHtml,
     renderIncidentHtml,
     renderIncidentCompactHtml,
     checklistProgress,

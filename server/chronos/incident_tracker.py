@@ -32,6 +32,7 @@ _STRONG: dict[str, list[str]] = {
         "difficulty breathing", "shortness of breath", "can't catch my breath",
         "unconscious", "seizure", "stroke", "overdose", "heart attack",
         "choking", "collapsed", "passed out", "allergic reaction",
+        "bleeding", "bit my tongue", "bitten my tongue", "tongue", "spicy",
     ],
     "non_emergency_noise": [
         "loud music", "noise complaint", "parked in front", "blocking my driveway",

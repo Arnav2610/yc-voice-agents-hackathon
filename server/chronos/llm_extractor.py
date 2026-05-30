@@ -33,12 +33,16 @@ Return compact JSON only:
   "escalation_required": true_or_false,
   "incident_upgraded_to": null,
   "resolved_slots": [],
-  "structured_notes": [{{"category":"threat|location|suspect|medical|other","field":"key","value":"fact"}}]
+  "structured_notes": [{{"category":"threat|location|suspect|medical|other","field":"key","value":"specific caller fact"}}],
+  "slot_values": {{"exact_location": "verbatim address if stated", "threat_description": "what caller said is happening", "weapon_info": "weapon type or denial if stated"}}
 }}
 
 Rules: classify from caller words only. break-in/robbery/intruder/knife at door -> active_threat.
+NEVER active_threat for tongue/mouth injury, spicy food, self-inflicted bite, or bleeding from eating — those are medical.
+Do NOT return active_threat on a partial unless explicit threat/weapon/intruder language is present.
 NEVER structure_fire without explicit smoke/fire. Extract location, weapon, threat facts immediately.
 Mark resolved_slots for info already stated (exact_location, threat_description, weapon_info, suspect_location).
+slot_values: operator-facing summaries using caller's actual words (never generic labels like "Weapon mentioned").
 Do NOT set caller_safety to safe/evacuated on partials — only unknown or at_risk.
 """
 
@@ -66,13 +70,24 @@ Return JSON:
   "resolved_slots": [],
   "structured_notes": [
     {{"category": "threat|suspect|victim|location|vehicle|medical|other", "field": "snake_case_key", "value": "verbatim or normalized fact"}}
-  ]
+  ],
+  "slot_values": {{
+    "exact_location": "full address/landmark from caller or omit",
+    "caller_safety": "where caller is + safe/at risk or omit",
+    "threat_description": "what is happening in caller words or omit",
+    "suspect_location": "where suspect is now or omit",
+    "weapon_info": "weapon type or explicit no-weapon or omit",
+    "callback_number": "name + phone digits or omit"
+  }}
 }}
 
 Rules:
 - Classify ONLY from what the CALLER describes about their emergency.
 - Robbery, home invasion, intruder at door, break-in, someone threatening to come in -> active_threat.
   Use possible_active_disturbance for fights/disturbance WITHOUT direct threat to caller's safety.
+- Tongue/mouth injury, spicy food burn, bit my tongue, bleeding after eating/lunch -> medical. NEVER active_threat.
+  "got bit" with tongue/spicy/food context is self-injury, not an assault.
+- Do NOT return active_threat unless another person is threatening the caller (intruder, weapon, robbery, assault).
 - NEVER structure_fire unless caller explicitly mentions smoke, fire, flames, or burning.
   An apartment address or hotel name alone is NOT a fire. Do not infer fire from "scared" or noise.
 - Once active_threat or possible_active_disturbance fits, do NOT return structure_fire.
@@ -85,7 +100,9 @@ Rules:
   exact_location, caller_safety, callback_number, threat_description, suspect_location, weapon_info,
   consciousness, breathing, trapped_person_status — even if the dispatcher has not asked yet.
 - structured_notes: extract ALL facts — full address, room number, caller name, phone/callback,
-  threat type (robbery/break-in), suspect at door, weapon mentions, etc.
+  threat type (robbery/break-in), suspect at door, weapon mentions, etc. Use specific caller wording.
+- slot_values: for each checklist slot already answered, write a concise operator summary using the
+  caller's actual words (never generic placeholders like "Confirmed" or "Weapon mentioned").
 - incident_upgraded_to: only when call STARTED as one type and escalated mid-call; otherwise set
   incident_type directly to active_threat/possible_active_disturbance and leave incident_upgraded_to null.
 """

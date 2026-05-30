@@ -6,6 +6,8 @@ Uses minimal transcript signals to return structured JSON — NOT used on live v
 
 from __future__ import annotations
 
+import re
+
 from typing import Any
 
 
@@ -53,7 +55,12 @@ def mock_extract_call_state(transcript: str, *, partial: bool = True) -> dict[st
     ) and any(x in t for x in ("got out", "evacuated", "made it outside", "i'm out", "we're out", "smoke")):
         out["incident_type"] = "structure_fire"
     if out.get("incident_type") is None and any(
-        x in t for x in ("can't breathe", "cannot breathe", "trouble breathing", "struggling to breathe", "chest pain", "choking", "not breathing", "bent my tongue")
+        x in t
+        for x in (
+            "can't breathe", "cannot breathe", "trouble breathing", "struggling to breathe",
+            "chest pain", "choking", "not breathing", "bent my tongue", "bleeding",
+            "tongue", "spicy", "got bit", "bit my tongue",
+        )
     ):
         out["incident_type"] = "medical"
     if out.get("incident_type") is None and (
@@ -72,6 +79,15 @@ def mock_extract_call_state(transcript: str, *, partial: bool = True) -> dict[st
     if any(x in t for x in ("screaming", "glass breaking", "fighting", "gun", "weapon", "threat")):
         out["incident_upgraded_to"] = "active_threat" if "gun" in t or "weapon" in t else "possible_active_disturbance"
         out["incident_type"] = out["incident_upgraded_to"]
+
+    from chronos.incident_signals import medical_without_threat
+
+    if re.search(r"\b(?:fire|smoke|flames|burning)\b", t):
+        if "vehicle" not in t and "highway" not in t and "101 " not in t and "crashed" not in t:
+            out["incident_type"] = "structure_fire"
+    elif medical_without_threat(transcript):
+        out["incident_type"] = "medical"
+        out["incident_upgraded_to"] = None
 
     # --- location ---
     if "5th and pine" in t or "fifth and pine" in t:
@@ -155,9 +171,58 @@ def mock_extract_call_state(transcript: str, *, partial: bool = True) -> dict[st
                     out["resolved_slots"].append(slot)
         if "rnf" in t or "kumar" in t:
             out["structured_notes"].append({"category": "contact", "field": "caller_name", "value": "RNF Kumar"})
-        if sum(c.isdigit() for c in t) >= 10:
-            out["structured_notes"].append({"category": "contact", "field": "callback_phone", "value": "provided"})
-            out["resolved_slots"].append("callback_number")
+        from chronos.partial_hints import _extract_phone
+
+        phone = _extract_phone(transcript)
+        if phone:
+            out["structured_notes"].append({"category": "contact", "field": "callback_number", "value": phone})
+            if "callback_number" not in out["resolved_slots"]:
+                out["resolved_slots"].append("callback_number")
+        elif sum(c.isdigit() for c in t) >= 10:
+            digits = re.sub(r"\D", "", t)
+            if len(digits) >= 10:
+                out["structured_notes"].append(
+                    {"category": "contact", "field": "callback_number", "value": digits[-10:]}
+                )
+                if "callback_number" not in out["resolved_slots"]:
+                    out["resolved_slots"].append("callback_number")
 
     out["resolved_slots"] = list(dict.fromkeys(out["resolved_slots"]))
+
+    slot_values: dict[str, str] = {}
+    if out.get("location_raw"):
+        slot_values["exact_location"] = out["location_raw"]
+    if out.get("caller_safety") == "safe":
+        slot_values["caller_safety"] = "Caller reports safe for now"
+    elif out.get("caller_safety") == "at_risk":
+        slot_values["caller_safety"] = "Caller still at risk / imminent danger"
+    elif out.get("caller_safety") == "evacuated":
+        slot_values["caller_safety"] = "Caller evacuated / outside"
+    for note in out["structured_notes"]:
+        cat, fld, val = note.get("category"), note.get("field"), note.get("value")
+        if not val:
+            continue
+        if fld in ("threat_type", "threat_description"):
+            slot_values["threat_description"] = val
+        elif fld in ("suspect_location", "intruder_location"):
+            slot_values["suspect_location"] = val
+        elif fld in ("weapon_type", "weapon"):
+            slot_values["weapon_info"] = val
+        elif fld == "callback_number":
+            slot_values["callback_number"] = val
+        elif fld == "caller_name" and slot_values.get("callback_number"):
+            slot_values["callback_number"] = f"{val} · {slot_values['callback_number']}"
+        elif cat == "medical" and fld == "injury":
+            slot_values["injury_status"] = val
+    if "rob" in t or "break" in t or "intruder" in t or "banging" in t:
+        slot_values.setdefault(
+            "threat_description",
+            "Someone banging / trying to break in; robbery threatened",
+        )
+        slot_values.setdefault("suspect_location", "At caller's door")
+    if "knife" in t or "gun" in t:
+        slot_values["weapon_info"] = "knife" if "knife" in t else "gun"
+    if "bleeding" in t and "tongue" in t:
+        slot_values["injury_status"] = "Tongue injury — bleeding after spicy food"
+    out["slot_values"] = slot_values
     return out

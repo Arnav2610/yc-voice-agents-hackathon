@@ -19,6 +19,7 @@ from typing import Any
 from chronos import config
 from chronos.events import EventStore
 from chronos.floor_controller import FloorController
+from chronos.incident_signals import medical_without_threat, normalize_incident_type
 from chronos.memory_retrieval import ChronosMemoryClient
 from chronos.mocks import dispatch_unit, escalate_to_human, resolve_location
 from chronos.sop_engine import SOPEngine
@@ -187,9 +188,9 @@ class ChronosKernel:
         for s in inc.resolved_slots:
             if s in self.state.asked_slot_counts:
                 del self.state.asked_slot_counts[s]
-        if self.use_llm_extraction:
-            import asyncio as _asyncio
-            _asyncio.create_task(self._resolve_slots_async())
+        import asyncio as _asyncio
+
+        _asyncio.create_task(self._resolve_slots_async())
         self._sync_resolved_slots(allow_safety=True)
         self.sop.update_checklist(self.state)
         self._emit(
@@ -217,9 +218,10 @@ class ChronosKernel:
             except TimeoutError:
                 memory_added = []
 
-        # 5) Escalation policy (unit dispatch requires an explicit tool call).
+        # 5) Escalation policy; dispatch units when policy marks case high-risk + location known.
         self._refresh_derived_notes()
         self._decide_escalation()
+        self._maybe_policy_dispatch()
         if self.state.human_handoff_ready and not self.state.human_handoff_announced:
             handoff = escalate_to_human(inc.escalation_reason or "intake complete — high-risk case")
             self._emit("human_handoff_ready", {"reason": inc.escalation_reason, "handoff": handoff})
@@ -316,7 +318,7 @@ class ChronosKernel:
             from chronos.llm_mock import mock_extract_call_state
 
             extracted = mock_extract_call_state(provisional, partial=True)
-            self._apply_extracted_state(extracted, partial=True)
+            self._apply_extracted_state(extracted, partial=True, transcript=provisional)
             self._emit_live_state(partial=True)
             return
 
@@ -445,8 +447,12 @@ class ChronosKernel:
             self._last_extraction_result = result
             apply_partial = partial and not self._pending_extraction_is_final
             self._pending_extraction_is_final = False
-            self._apply_extracted_state(result, partial=apply_partial)
+            self._apply_extracted_state(result, partial=apply_partial, transcript=transcript)
             self._emit_live_state(partial=apply_partial)
+            if apply_partial:
+                import asyncio as _asyncio
+
+                _asyncio.create_task(self._resolve_slots_async())
 
     def _invalidate_sop_plan(self) -> None:
         self.state.sop_plan = None
@@ -499,45 +505,44 @@ class ChronosKernel:
         self._write_live(force=True)
 
     async def _resolve_slots_async(self) -> None:
-        """Ask LLM which checklist slots are already answered in the transcript."""
-        if not self.use_llm_extraction:
-            return
+        """Ask LLM which checklist slots are answered and fill Known/ask display text."""
         plan = self.state.sop_plan
         if not plan or not plan.get("slots"):
             return
+        all_slots = list(plan["slots"])
         unresolved = [
             s["id"]
-            for s in plan["slots"]
+            for s in all_slots
             if s["id"] not in (self.state.incident.resolved_slots or [])
         ]
-        if not unresolved:
-            return
-        from chronos.llm_guidance import resolve_slots_llm
         import asyncio as _asyncio
-        try:
-            resolved = await _asyncio.wait_for(
-                resolve_slots_llm(self.state.cumulative_text, unresolved[:10]),
-                timeout=2.0,
-            )
-            if resolved:
-                merged = set(self.sop._llm_resolved) | resolved
-                self.sop.set_llm_resolved(merged)
-                self.sop.update_checklist(self.state)
-                self._emit_live_state(partial=False)
-        except Exception:
-            pass
+        from chronos.slot_display import derive_slot_display_values, merge_slot_display_values
 
-    def _accept_incident_type(self, new_type: str) -> bool:
-        """Prevent classifying a threat/robbery call back to structure fire."""
-        inc = self.state.incident
-        anchor = inc.incident_type
-        if inc.upgraded_to in _THREAT_TYPES:
-            anchor = inc.upgraded_to
-        if anchor in _THREAT_TYPES and new_type not in _THREAT_TYPES:
-            return False
-        if anchor in _THREAT_TYPES and new_type == "structure_fire":
-            return False
-        return True
+        resolved: set[str] = set()
+        if self.use_llm_extraction:
+            from chronos.llm_guidance import resolve_slot_display_values_llm, resolve_slots_llm
+
+            try:
+                if unresolved:
+                    resolved = await _asyncio.wait_for(
+                        resolve_slots_llm(self.state.cumulative_text, unresolved[:10]),
+                        timeout=2.5,
+                    )
+                    if resolved:
+                        merged = set(self.sop._llm_resolved) | resolved
+                        self.sop.set_llm_resolved(merged)
+                        self.sop.update_checklist(self.state)
+                displays = await _asyncio.wait_for(
+                    resolve_slot_display_values_llm(self.state.cumulative_text, all_slots[:12]),
+                    timeout=3.0,
+                )
+                changed = merge_slot_display_values(self.state, displays)
+                if changed or resolved:
+                    self._emit_live_state(partial=False)
+            except Exception:
+                pass
+        elif merge_slot_display_values(self.state, derive_slot_display_values(self.state)):
+            self._emit_live_state(partial=False)
 
     def _sync_resolved_slots(self, allow_safety: bool = True) -> None:
         from chronos.slot_inference import infer_resolved_slots
@@ -547,26 +552,55 @@ class ChronosKernel:
             merged = set(self.sop._llm_resolved) | inferred
             self.sop.set_llm_resolved(merged)
 
-    def _apply_extracted_state(self, extracted: dict[str, Any], partial: bool = False) -> None:
+    def _accept_incident_type(self, new_type: str, *, transcript: str = "", partial: bool = False) -> bool:
+        """Prevent threat↔fire flips; allow medical correction when transcript supports it."""
+        inc = self.state.incident
+        text = (transcript or self._pending_partial_transcript or self.state.cumulative_text or "").strip()
+        anchor = inc.incident_type
+        if inc.upgraded_to in _THREAT_TYPES:
+            anchor = inc.upgraded_to
+        if anchor in _THREAT_TYPES and new_type not in _THREAT_TYPES:
+            if new_type == "medical" and medical_without_threat(text):
+                return True
+            if not partial and new_type in ("medical", "unknown", "non_emergency_noise"):
+                if medical_without_threat(text):
+                    return True
+            return False
+        if anchor in _THREAT_TYPES and new_type == "structure_fire":
+            return False
+        return True
+
+    def _apply_extracted_state(
+        self, extracted: dict[str, Any], partial: bool = False, *, transcript: str | None = None
+    ) -> None:
         """Apply LLM-extracted structured state — the only classification path."""
         if not extracted:
             return
+        text = (transcript or self._pending_partial_transcript or self.state.cumulative_text or "").strip()
         inc = self.state.incident
         changed = False
         prev_type = inc.incident_type
 
         upgraded = extracted.get("incident_upgraded_to")
         if upgraded and upgraded not in ("null", None):
-            if upgraded != inc.upgraded_to or inc.incident_type != upgraded:
-                inc.upgraded_to = upgraded
-                inc.incident_type = upgraded
-                inc.incident_confidence = max(inc.incident_confidence, float(extracted.get("incident_confidence") or 0.9))
-                changed = True
-                self._invalidate_sop_plan()
+            upgraded = normalize_incident_type(str(upgraded), text, partial=partial)
+            if upgraded and self._accept_incident_type(upgraded, transcript=text, partial=partial):
+                if upgraded != inc.upgraded_to or inc.incident_type != upgraded:
+                    inc.upgraded_to = upgraded if upgraded in _THREAT_TYPES else None
+                    inc.incident_type = upgraded
+                    inc.incident_confidence = max(
+                        inc.incident_confidence, float(extracted.get("incident_confidence") or 0.9)
+                    )
+                    changed = True
+                    self._invalidate_sop_plan()
 
         t = extracted.get("incident_type")
-        if t and t not in ("unknown", "null") and self._accept_incident_type(t):
+        if t and t not in ("unknown", "null"):
+            t = normalize_incident_type(str(t), text, partial=partial)
+        if t and self._accept_incident_type(t, transcript=text, partial=partial):
             if t != inc.incident_type:
+                if prev_type in _THREAT_TYPES and t == "medical":
+                    inc.upgraded_to = None
                 if prev_type and prev_type != t:
                     self._invalidate_sop_plan()
                 inc.incident_type = t
@@ -655,6 +689,14 @@ class ChronosKernel:
 
         extracted_notes = extracted.get("structured_notes") or []
         self._merge_structured_notes(extracted_notes, partial=partial)
+        from chronos.slot_display import derive_slot_display_values, merge_slot_display_values
+
+        slot_vals = extracted.get("slot_values")
+        if isinstance(slot_vals, dict) and slot_vals:
+            if merge_slot_display_values(self.state, slot_vals):
+                changed = True
+        if merge_slot_display_values(self.state, derive_slot_display_values(self.state)):
+            changed = True
         self._sync_resolved_slots(allow_safety=not partial)
 
         if changed or not partial or extracted_notes or extracted.get("resolved_slots"):
@@ -664,6 +706,7 @@ class ChronosKernel:
                     self.sop.ensure_plan(self.state, inc.incident_type)
             self.sop.update_checklist(self.state)
             self._decide_escalation(extracted)
+            self._maybe_policy_dispatch()
             self._refresh_derived_notes()
             if not partial:
                 self._emit("incident_hypothesis", {
@@ -858,9 +901,16 @@ class ChronosKernel:
             self._write_live(force=True)
         return sent
 
+    def _maybe_policy_dispatch(self) -> None:
+        """Dispatch simulated units once policy requires escalation and location is known."""
+        inc = self.state.incident
+        if not inc.escalation_required or not inc.location_raw:
+            return
+        self._dispatch_units()
+
     def _maybe_dispatch_units(self) -> None:
-        """Deprecated — dispatch is explicit-only via dispatch_simulated_units()."""
-        return
+        """Deprecated alias — use _maybe_policy_dispatch()."""
+        self._maybe_policy_dispatch()
 
     def _decide_escalation(self, extracted: dict[str, Any] | None = None) -> None:
         inc = self.state.incident
@@ -880,6 +930,10 @@ class ChronosKernel:
             escalate, reason = True, f"Incident upgraded to {inc.upgraded_to}"
         if "weapon" in inc.hazards:
             escalate, reason = True, "Weapon or threat indicated"
+        if set(inc.hazards or []) & {"breathing", "cardiac", "unconscious", "injury"}:
+            escalate, reason = True, reason or "Medical symptoms reported"
+        if inc.incident_type in _THREAT_TYPES:
+            escalate, reason = True, reason or "Disturbance or threat — response warranted"
         if inc.incident_type == "medical":
             escalate, reason = True, "Medical crisis — human escalation required"
         if extracted and extracted.get("escalation_required"):

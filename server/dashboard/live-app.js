@@ -17,78 +17,69 @@ function renderTranscriptLive(snap, events) {
   }
 
   requestAnimationFrame(() => {
-    const last = el.lastElementChild;
-    if (last) last.scrollIntoView({ block: "end", behavior: "smooth" });
-    else el.scrollTop = el.scrollHeight;
+    ChronosUI.maybeAutoScrollTranscript(el, ChronosUI.transcriptMessageCount(snap, events));
   });
 }
 
-function renderIncidentSop(inc, snap, isLive) {
-  const panel = $("panel-sop");
-  if (!isLive || !inc || !inc.incident_type) {
-    $("incident").innerHTML = ChronosUI.renderIncidentCompactHtml(null);
+function renderSopContext(inc, snap, isLive) {
+  const panel = $("panel-sop-context");
+  const hint = $("checklist-hint");
+
+  if (!isLive) {
+    hint.textContent = "awaiting call";
+    $("incident").innerHTML = '<span class="chip chip-listening">Start a call to begin intake.</span>';
     $("incident-progress").style.display = "none";
+    $("next-question").textContent = "—";
+    $("next-question").className = "next-q-inline empty";
     panel.querySelectorAll(".handoff-ready, .handoff-pending").forEach((n) => n.remove());
     return;
   }
-  inc._planDisplay = (snap.sop_plan && snap.sop_plan.protocol_title) || "";
-  $("incident").innerHTML = ChronosUI.renderIncidentCompactHtml(inc);
 
-  const prog = ChronosUI.checklistProgress(snap.checklist);
-  const progEl = $("incident-progress");
-  if (prog.total > 0) {
-    progEl.style.display = "block";
-    $("incident-progress-fill").style.width = prog.pct + "%";
-    $("incident-progress-label").textContent = `${prog.done}/${prog.total} SOP items · ${prog.pct}%`;
+  const plan = snap.sop_plan || {};
+  if (plan.source === "merged") hint.textContent = "AI-tailored · live values";
+  else if (plan.protocol_title) hint.textContent = plan.protocol_title + " · live values";
+  else hint.textContent = "live values";
+
+  if (!inc || !inc.incident_type) {
+    $("incident").innerHTML = ChronosUI.renderIncidentCompactHtml(null);
+    $("incident-progress").style.display = "none";
   } else {
-    progEl.style.display = "none";
+    inc._planDisplay = plan.protocol_title || "";
+    $("incident").innerHTML = ChronosUI.renderIncidentCompactHtml(inc);
+
+    const prog = ChronosUI.checklistProgress(snap);
+    const progEl = $("incident-progress");
+    if (prog.total > 0) {
+      progEl.style.display = "block";
+      $("incident-progress-fill").style.width = prog.pct + "%";
+      $("incident-progress-label").textContent = `${prog.done}/${prog.total} SOP items · ${prog.pct}%`;
+    } else {
+      progEl.style.display = "none";
+    }
+  }
+
+  const qEl = $("next-question");
+  const q = snap.recommended_question;
+  if (q) {
+    qEl.textContent = "▶ " + q;
+    qEl.className = "next-q-inline";
+  } else {
+    qEl.textContent = "—";
+    qEl.className = "next-q-inline empty";
   }
 
   panel.querySelectorAll(".handoff-ready, .handoff-pending").forEach((n) => n.remove());
-  const insertAfter = $("next-question");
+  const insertAfter = qEl;
   if (snap.human_handoff_ready) {
     insertAfter.insertAdjacentHTML(
       "afterend",
-      `<div class="handoff-ready">⛑ Human dispatcher handoff — intake complete · ${ChronosUI.esc(inc.escalation_reason || "high-risk case")}</div>`
+      `<div class="handoff-ready">⛑ Human dispatcher handoff — intake complete · ${ChronosUI.esc((inc && inc.escalation_reason) || "high-risk case")}</div>`
     );
-  } else if (inc.escalation_required && !snap.intake_complete) {
+  } else if (inc && inc.escalation_required && !snap.intake_complete) {
     insertAfter.insertAdjacentHTML(
       "afterend",
       `<div class="handoff-pending">📋 Gathering required info — ${(inc.missing_slots || []).length} item(s) remaining</div>`
     );
-  }
-}
-
-function renderHero(snap, isLive) {
-  const inc = snap.incident || {};
-  const plan = snap.sop_plan || {};
-  if (!isLive || !(inc.incident_type || inc.location_raw)) {
-    $("proto-title").textContent = "Awaiting call…";
-    $("incident-title").textContent = isLive ? "Listening" : "Idle";
-    $("incident-badges").innerHTML = "";
-    $("progress-wrap").style.display = "none";
-    return;
-  }
-  $("proto-title").textContent = plan.protocol_title || ChronosUI.protocolTitle(inc.incident_type);
-  $("incident-title").textContent = plan.display_name || ChronosUI.incidentLabel(inc.incident_type);
-  $("incident-badges").innerHTML = [
-    inc.incident_type ? `<span class="badge risk-${inc.risk_level || "unknown"}">${ChronosUI.esc(inc.risk_level || "unknown")} risk</span>` : "",
-    inc.upgraded_to ? `<span class="badge risk-high">↑ ${ChronosUI.esc(inc.upgraded_to.replace(/_/g, " "))}</span>` : "",
-    plan.source === "merged" ? `<span class="pill">AI-tailored</span>` : "",
-  ]
-    .filter(Boolean)
-    .join("");
-
-  const items = (snap.checklist || []).filter((c) => c.active);
-  const done = items.filter((c) => c.resolved).length;
-  const total = items.length;
-  if (total > 0) {
-    const pct = Math.round((done / total) * 100);
-    $("progress-wrap").style.display = "block";
-    $("progress-pct").textContent = `${done}/${total} · ${pct}%`;
-    $("progress-fill").style.width = pct + "%";
-  } else {
-    $("progress-wrap").style.display = "none";
   }
 }
 
@@ -118,61 +109,30 @@ function renderEscalation(snap, isLive) {
 }
 
 function renderDispatchesLive(snap, isLive) {
-  const panel = $("cad-panel");
-  const board = $("cad-board");
+  const alert = $("dispatch-alert");
+  const body = $("dispatch-alert-body");
   const disp = snap.dispatches || [];
-  const hasDispatchEvent = (snap._dispatch_events || 0) > 0;
 
-  if (!isLive || !disp.length || !hasDispatchEvent) {
-    panel.style.display = "none";
-    board.innerHTML = "";
+  if (!alert || !body) return;
+
+  if (!isLive || !disp.length) {
+    alert.style.display = "none";
+    body.innerHTML = "";
     return;
   }
 
-  const icons = { fire: "🚒", police: "🚔", ems: "🚑" };
-  panel.style.display = "block";
-  board.innerHTML = disp
-    .map(
-      (d) => `
-    <div class="cad-unit">
-      <div class="u-type">${icons[d.unit_type] || "📡"} ${ChronosUI.esc((d.unit_type || "").toUpperCase())}</div>
-      <div class="u-status">● SIMULATED · EN ROUTE</div>
-      <div class="u-loc">${ChronosUI.esc(d.location || "—")}</div>
-      <div class="u-reason">${ChronosUI.esc(d.reason || "")}</div>
-    </div>`
-    )
-    .join("");
+  alert.style.display = "block";
+  body.innerHTML = ChronosUI.renderDispatchAlertHtml(snap);
 }
 
-function renderChecklist(snap, isLive) {
+function renderChecklist(snap, isLive, events) {
   const el = $("checklist");
-  const plan = snap.sop_plan;
-  const hint = $("checklist-hint");
   if (!isLive) {
-    hint.textContent = "awaiting call";
     el.innerHTML = '<div class="empty">Start a call to begin SOP intake.</div>';
     return;
   }
-  if (plan && plan.source === "merged") hint.textContent = "AI-tailored · live values";
-  else if (plan && plan.protocol_title) hint.textContent = plan.protocol_title;
-  else hint.textContent = "checklist + captured facts";
-
-  el.innerHTML = ChronosUI.renderMergedIntakeHtml(snap, snap.recommended_slot);
-  if (!el.innerHTML) {
-    el.innerHTML = '<div class="empty">Classifying incident — intake will appear when type is detected.</div>';
-  }
-}
-
-function renderNextQuestion(snap, isLive) {
-  const el = $("next-question");
-  const q = isLive ? snap.recommended_question : null;
-  if (q) {
-    el.textContent = "▶ " + q;
-    el.className = "next-q-inline";
-  } else {
-    el.textContent = "—";
-    el.className = "next-q-inline empty";
-  }
+  snap._events = events || [];
+  el.innerHTML = ChronosUI.renderSopIntakeTable(snap, snap.recommended_slot);
 }
 
 function renderMemoryLive(snap) {
@@ -201,11 +161,9 @@ async function tick() {
       : "idle — start a call at :7860";
 
     renderTranscriptLive(snap, events);
-    renderHero(snap, isLive);
+    renderSopContext(snap.incident, snap, isLive);
     renderEscalation(snap, isLive);
-    renderIncidentSop(snap.incident, snap, isLive);
-    renderNextQuestion(snap, isLive);
-    renderChecklist(snap, isLive);
+    renderChecklist(snap, isLive, events);
     renderDispatchesLive(snap, isLive);
     renderMemoryLive(snap);
   } catch (e) {

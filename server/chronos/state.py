@@ -147,6 +147,7 @@ class CallState:
     floor_actions: list[dict[str, Any]] = field(default_factory=list)
     guidance_history: list[dict[str, Any]] = field(default_factory=list)
     structured_notes: list[StructuredNote] = field(default_factory=list)
+    slot_display_values: dict[str, str] = field(default_factory=dict)
     dispatches: list[DispatchRecord] = field(default_factory=list)
 
     # Interaction / behavior flags (read by the evaluator).
@@ -227,6 +228,7 @@ class CallState:
             "floor_actions": self.floor_actions,
             "guidance_history": self.guidance_history,
             "structured_notes": [n.to_dict() for n in self.structured_notes],
+            "slot_display_values": dict(self.slot_display_values),
             "dispatches": [d.to_dict() for d in self.dispatches],
             "intake_complete": self.intake_complete,
             "human_handoff_ready": self.human_handoff_ready,

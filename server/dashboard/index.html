@@ -65,9 +65,15 @@
     </section>
 
     <section class="col">
-      <div class="panel" id="panel-dispatches" style="display:none">
-        <h2>Simulated unit dispatch <span class="hint">stay on line</span></h2>
-        <div id="dispatches" class="dispatch-panel"></div>
+      <div class="panel dispatch-alert-panel" id="panel-dispatches" style="display:none">
+        <div class="dispatch-alert-head">
+          <div class="dispatch-alert-kicker">
+            <span class="dispatch-alert-pulse" aria-hidden="true"></span>
+            <h2 class="dispatch-alert-title">Units dispatched</h2>
+          </div>
+          <p class="dispatch-alert-sub">Simulated response only — stay on line with the caller</p>
+        </div>
+        <div id="dispatches" class="dispatch-panel dispatch-alert-body"></div>
       </div>
 
       <div class="panel" id="panel-memory">

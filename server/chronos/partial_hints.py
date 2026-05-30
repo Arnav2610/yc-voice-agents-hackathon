@@ -18,6 +18,38 @@ _THREAT = re.compile(
     r"\b(banging|break[\s-]?in|breaking\s+in|trying\s+to\s+break|intruder|rob(?:bing|bery)?)\b",
     re.I,
 )
+_MEDICAL = re.compile(
+    r"\b(?:bleeding|blood|tongue|spicy|choking|bit\s+my\s+tongue|bitten\s+my\s+tongue|"
+    r"chest\s+pain|can't\s+breathe|cannot\s+breathe)\b",
+    re.I,
+)
+_YCOMB = re.compile(r"\by\s+combinator\b", re.I)
+
+
+_PHONE_DIGITS = re.compile(r"\d{10,}")
+_PHONE_CHUNK = re.compile(
+    r"(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}|\d{10,}"
+)
+
+
+def _extract_phone(text: str) -> str | None:
+    """Pull a callback number from spoken or typed digits in the transcript."""
+    if not text:
+        return None
+    chunks = _PHONE_CHUNK.findall(text)
+    for raw in reversed(chunks):
+        digits = re.sub(r"\D", "", raw)
+        if len(digits) >= 10:
+            d = digits[-11:] if len(digits) >= 11 and digits[0] == "1" else digits[-10:]
+            if len(d) == 10:
+                return f"({d[:3]}) {d[3:6]}-{d[6:]}"
+            if len(d) == 11:
+                return f"+{d[0]} ({d[1:4]}) {d[4:7]}-{d[7:]}"
+            return digits
+    m = _PHONE_DIGITS.search(re.sub(r"\s", "", text))
+    if m:
+        return m.group(0)
+    return None
 
 
 def hints_from_text(text: str, turn: int = 0) -> list[StructuredNote]:
@@ -54,5 +86,18 @@ def hints_from_text(text: str, turn: int = 0) -> list[StructuredNote]:
                 turn=turn,
             )
         )
+
+    if _MEDICAL.search(text):
+        detail = "Injury / bleeding reported"
+        if "tongue" in t and ("spicy" in t or "bit" in t or "lunch" in t):
+            detail = "Tongue injury after spicy food — bleeding"
+        notes.append(StructuredNote(category="medical", field="injury", value=detail, turn=turn))
+
+    if _YCOMB.search(text) and not _STREET_NUM.search(text):
+        notes.append(StructuredNote(category="location", field="address", value="Y Combinator office", turn=turn))
+
+    phone = _extract_phone(text)
+    if phone:
+        notes.append(StructuredNote(category="contact", field="callback_number", value=phone, turn=turn))
 
     return notes

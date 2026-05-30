@@ -30,6 +30,7 @@ import uuid
 from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import EndTaskFrame, LLMRunFrame
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.pipeline.pipeline import Pipeline
@@ -53,6 +54,7 @@ from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.turns.user_turn_strategies import FilterIncompleteUserTurnStrategies
+from pipecat.turns.user_turn_completion_mixin import UserTurnCompletionConfig
 from pipecat.workers.runner import WorkerRunner
 
 from chronos import config
@@ -162,12 +164,21 @@ async def run_bot(
     tools = ToolsSchema(standard_tools=[dispatch_tool])
     llm.register_direct_function(dispatch_tool)
 
+    # Wait for >1s of silence before treating the caller as done speaking (default VAD is 0.2s).
+    vad_stop = float(os.getenv("CHRONOS_VAD_STOP_SECS", "1.05"))
+    vad_params = VADParams(stop_secs=vad_stop)
+    turn_completion = UserTurnCompletionConfig(
+        incomplete_short_timeout=2.0,
+        incomplete_long_timeout=4.0,
+        instructions=None,
+    )
+    logger.info(f"Chronos VAD stop_secs={vad_stop} (respond after caller pause)")
     context = LLMContext(tools=tools)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(),
-            user_turn_strategies=FilterIncompleteUserTurnStrategies(),
+            vad_analyzer=SileroVADAnalyzer(params=vad_params),
+            user_turn_strategies=FilterIncompleteUserTurnStrategies(config=turn_completion),
         ),
     )
 

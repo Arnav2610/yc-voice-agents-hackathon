@@ -179,12 +179,90 @@ def test_realtime_partial_knife_break_in_before_turn_end():
     assert weapon_at is not None and weapon_at <= total_words
     assert inc.location_raw and "market" in inc.location_raw.lower()
     assert "weapon" in inc.hazards
-    assert not k.state.dispatches, "units dispatch only via explicit tool call"
-    k.dispatch_simulated_units(["police"], "Active threat with weapon reported")
+    assert inc.escalation_required, "active threat with location should escalate"
+    assert k.state.dispatches, "policy dispatch when escalation + location known"
     assert any(d.unit_type == "police" for d in k.state.dispatches)
     note_fields = {(n.category, n.field) for n in k.state.structured_notes}
     assert ("threat", "weapon_type") in note_fields or ("threat", "weapon") in note_fields
     assert any(e["event_type"] == "sop_checklist_update" for e in store.list(k.state.call_id))
+
+
+def test_spicy_tongue_bleeding_is_medical_not_active_threat():
+    """Food-related tongue injury must not classify as active threat or ask lock-the-door questions."""
+    from chronos.events import EventStore
+    from chronos.kernel import ChronosKernel
+    from chronos.memory_retrieval import ChronosMemoryClient
+
+    utterance = (
+        "Hello. Amato Y Combinator Office and we just had lunch and it was very spicy "
+        "so my uh tongue uh got bit and I'm bleeding very aggressively now"
+    )
+
+    async def run():
+        k = ChronosKernel(
+            "spicy_tongue",
+            memory_client=ChronosMemoryClient(force_local=True),
+            event_store=EventStore(),
+            use_llm_extraction=False,
+        )
+        partial = ""
+        for w in utterance.split():
+            partial = (partial + " " + w).strip()
+            await k.observe_partial(partial)
+        await k.process_caller_turn(utterance)
+        return k
+
+    k = asyncio.run(run())
+    inc = k.state.incident
+    assert inc.incident_type == "medical", f"expected medical, got {inc.incident_type}"
+    assert inc.incident_type not in ("active_threat", "possible_active_disturbance")
+    rec = (k.state.recommended_question or "").lower()
+    assert "lock" not in rec
+    assert "room with a lock" not in rec
+
+
+def test_mistaken_active_threat_reclassifies_to_medical():
+    """If the LLM prematurely labels a tongue injury as active_threat, kernel must correct it."""
+    from chronos.events import EventStore
+    from chronos.kernel import ChronosKernel
+    from chronos.llm_extractor import set_extract_override
+    from chronos.memory_retrieval import ChronosMemoryClient
+
+    utterance = (
+        "Y Combinator office, lunch was very spicy, my tongue got bit and I'm bleeding"
+    )
+
+    def fake_extract(_transcript: str, partial: bool) -> dict:
+        return {
+            "incident_type": "active_threat",
+            "incident_confidence": 0.92,
+            "location_raw": "Y Combinator office",
+            "location_certain": True,
+            "caller_safety": "unknown",
+            "third_party_at_risk": False,
+            "hazards": ["injury"],
+            "risk_level": "critical",
+            "escalation_required": True,
+            "resolved_slots": ["exact_location"],
+            "structured_notes": [],
+        }
+
+    async def run():
+        set_extract_override(fake_extract)
+        try:
+            k = ChronosKernel(
+                "reclass_medical",
+                memory_client=ChronosMemoryClient(force_local=True),
+                event_store=EventStore(),
+                use_llm_extraction=True,
+            )
+            await k.process_caller_turn(utterance)
+            return k
+        finally:
+            set_extract_override(None)
+
+    k = asyncio.run(run())
+    assert k.state.incident.incident_type == "medical"
 
 
 def test_robbery_classified_active_threat_not_structure_fire():

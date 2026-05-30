@@ -281,6 +281,89 @@ Rules:
 - Do NOT resolve trapped_person_status just because caller evacuated.
 """
 
+_SLOT_DISPLAY_PROMPT = """\
+Transcript:
+{transcript}
+
+For each checklist item, write an operator-facing summary ONLY if the caller already stated \
+relevant facts anywhere in the transcript. Omit slots with no caller-provided information.
+
+Checklist:
+{slots}
+
+Return JSON only:
+{{"slot_values": {{"slot_id": "specific detail using caller words (max 120 chars)", ...}}}}
+
+Rules:
+- Quote or paraphrase the caller's actual words — never generic placeholders like "Confirmed", \
+"Weapon mentioned", or "Injuries reported".
+- exact_location / location: full address, building, room, or landmark as stated.
+- caller_safety: where the caller is and whether they feel safe or still at risk.
+- threat_description: what is happening in plain language from the caller.
+- suspect_location: where the suspect/intruder is now (door, inside, fled, etc.).
+- weapon_info: weapon type if seen/threatened, OR explicit denial if caller says no weapon.
+- callback_number: caller name and phone/callback digits if given.
+- consciousness / breathing / injury_status: patient status using caller's description.
+- trapped_person_status: who may still be inside or that everyone is out.
+- Only include keys from the checklist above; skip unknown slots.
+"""
+
+
+async def resolve_slot_display_values_llm(
+    transcript: str, slots: list[dict[str, str]]
+) -> dict[str, str]:
+    """Ask LLM for operator-facing Known/ask cell text per checklist slot."""
+    import asyncio
+
+    if not slots or not transcript.strip():
+        return {}
+    try:
+        lines = []
+        for s in slots:
+            sid = s.get("id") or s.get("slot") or ""
+            label = s.get("label") or sid.replace("_", " ")
+            question = s.get("question") or ""
+            lines.append(f"- {sid} ({label}): {question}")
+        prompt = _SLOT_DISPLAY_PROMPT.format(transcript=transcript[-2500:], slots="\n".join(lines))
+        raw = await asyncio.to_thread(
+            _chat,
+            [
+                {"role": "system", "content": _EXTRACTION_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            False,
+            450,
+        )
+        data = _extract_json(raw)
+        if not data or not isinstance(data.get("slot_values"), dict):
+            return {}
+        out: dict[str, str] = {}
+        for k, v in data["slot_values"].items():
+            val = str(v or "").strip()
+            if val and val.lower() not in ("null", "none", "unknown", "n/a", "confirmed", "provided"):
+                if not _GENERIC_SLOT_VALUE(val):
+                    out[str(k)] = val
+        return out
+    except Exception:
+        return {}
+
+
+def _GENERIC_SLOT_VALUE(val: str) -> bool:
+    low = val.lower().strip()
+    generic = {
+        "weapon mentioned",
+        "injuries reported",
+        "injury reported",
+        "breathing difficulty",
+        "breathing difficulty reported",
+        "confirmed",
+        "provided",
+        "yes",
+        "unknown",
+        "break-in / intruder at door",
+    }
+    return low in generic or low.endswith(" mentioned") or low.endswith(" reported")
+
 
 async def resolve_slots_llm(transcript: str, slot_ids: list[str]) -> set[str]:
     """Ask LLM which checklist slots are already answered in the transcript."""
