@@ -3,7 +3,7 @@
 
 UV ?= uv
 
-.PHONY: help install seed bot dash dashboard democall regression improve improve-llm \
+.PHONY: help install seed bot bot-twilio twilio-twiml dash dashboard democall regression improve improve-llm \
         reset fake-cekura text-ws test demo
 
 help:
@@ -11,6 +11,8 @@ help:
 	@echo "  make install      uv sync (install deps)"
 	@echo "  make seed         seed institutional memory into Supermemory + local"
 	@echo "  make bot          run the voice bot (WebRTC :7860) + dashboard (:7861)"
+	@echo "  make bot-twilio   run for Twilio phone calls (needs PROXY=your.ngrok.io)"
+	@echo "  make twilio-twiml print TwiML XML for your Twilio number (PROXY=...)"
 	@echo "  make dash         run the dashboard standalone (:7861) — drive the whole demo from the browser"
 	@echo "  make democall     play a scripted call onto the dashboard (no mic needed)"
 	@echo "  make text-ws      run the Cekura text-WS bridge (:8970) for live Cekura runs"
@@ -30,6 +32,21 @@ seed:
 
 bot:
 	$(UV) run bot-chronos.py
+
+# Twilio: expose port 7860 publicly (ngrok http 7860), set PROXY to the ngrok host.
+# Attach POST https://PROXY/ as the voice webhook on your Twilio number (or TwiML Bin).
+bot-twilio:
+	@PROXY_HOST="$(PROXY)"; \
+	if [ -z "$$PROXY_HOST" ]; then PROXY_HOST="$$TWILIO_PUBLIC_URL"; fi; \
+	if [ -z "$$PROXY_HOST" ]; then \
+		echo "Set PROXY=your-subdomain.ngrok-free.app or TWILIO_PUBLIC_URL in .env"; exit 1; \
+	fi; \
+	echo "Twilio voice webhook: https://$$PROXY_HOST/"; \
+	echo "Dashboard (local):    http://localhost:7861"; \
+	$(UV) run bot-chronos.py -t twilio -x $$PROXY_HOST --host 0.0.0.0
+
+twilio-twiml:
+	$(UV) run python scripts/print_twilio_twiml.py $(PROXY)
 
 dash dashboard:
 	$(UV) run python -m chronos.dashboard_server

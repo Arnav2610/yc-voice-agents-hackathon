@@ -1,9 +1,14 @@
-agent_name = "flower-bot"
-secret_set = "flower-bot-secrets"
+# Chronos 911 — Pipecat Cloud deployment (Twilio telephony)
+# Deploy: cd server && pc cloud secrets set chronos-911-secrets --file ../.env && pc cloud deploy
+
+agent_name = "chronos-911"
+secret_set = "chronos-911-secrets"
+image = "chronos-911:latest"
+entry = "bot-chronos.py"
 agent_profile = "agent-1x"
 
 [krisp_viva]
-	audio_filter = "tel"
+audio_filter = "tel"
 
 [scaling]
-	min_agents = 1
+min_agents = 1
