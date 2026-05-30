@@ -11,6 +11,7 @@ guards, and SOP slot scoping — but never keyword classification.
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -193,10 +194,10 @@ class ChronosKernel:
                 del self.state.asked_slot_counts[s]
         import asyncio as _asyncio
 
-        _asyncio.create_task(self._resolve_slots_async())
         self._sync_resolved_slots(allow_safety=True)
         self._avoid_repeat_question()
         self.sop.update_checklist(self.state)
+        self._schedule_slot_resolve()
         self._emit(
             "sop_checklist_update",
             {
@@ -218,7 +219,7 @@ class ChronosKernel:
         else:
             import asyncio as _asyncio
             try:
-                memory_added = await _asyncio.wait_for(self._retrieve_memory(), timeout=2.0)
+                memory_added = await _asyncio.wait_for(self._retrieve_memory(), timeout=1.0)
             except TimeoutError:
                 memory_added = []
 
@@ -339,7 +340,7 @@ class ChronosKernel:
     async def _debounced_extraction(self) -> None:
         import asyncio as _asyncio
 
-        await _asyncio.sleep(0.18)
+        await _asyncio.sleep(0.28)
         if self._processing_final:
             return
         transcript = self._pending_partial_transcript
@@ -350,7 +351,7 @@ class ChronosKernel:
             return
         word_count = len(transcript.split())
         new_words = word_count - self._words_at_last_extraction
-        if new_words < 2 and self._words_at_last_extraction > 0:
+        if new_words < 3 and self._words_at_last_extraction > 0:
             return
         self._words_at_last_extraction = word_count
         seq = self._extraction_seq + 1
@@ -456,10 +457,72 @@ class ChronosKernel:
             self._pending_extraction_is_final = False
             self._apply_extracted_state(result, partial=apply_partial, transcript=transcript)
             self._emit_live_state(partial=apply_partial)
-            if apply_partial:
-                import asyncio as _asyncio
+            # Partial extraction already returns resolved_slots + slot_values — skip extra LLM round-trips.
 
-                _asyncio.create_task(self._resolve_slots_async())
+    def _schedule_slot_resolve(self) -> None:
+        """Coalesce background intake slot LLM work (one in flight at a time)."""
+        import asyncio as _asyncio
+
+        if self._slot_resolve_task and not self._slot_resolve_task.done():
+            return
+        self._slot_resolve_task = _asyncio.create_task(self._resolve_slots_async())
+
+    async def _resolve_slots_async(self) -> None:
+        """Fill any gaps in slot resolution + Known/ask display (single LLM call)."""
+        plan = self.state.sop_plan
+        if not plan or not plan.get("slots"):
+            return
+        all_slots = list(plan["slots"])
+        slots_by_id = {s["id"]: s for s in all_slots if s.get("id")}
+        unresolved = [
+            s["id"]
+            for s in all_slots
+            if s["id"] not in (self.state.incident.resolved_slots or [])
+        ]
+        import asyncio as _asyncio
+        from chronos.llm_guidance import _fast_llm, resolve_intake_slots_llm
+        from chronos.slot_display import (
+            merge_slot_display_values,
+            prune_slot_display_values,
+            slots_missing_display,
+        )
+
+        allowed = self._resolved_slot_ids()
+        need_display = slots_missing_display(self.state, allowed)
+        if _fast_llm():
+            if self._sync_slot_displays():
+                self._emit_live_state(partial=False)
+            return
+        if not unresolved and not need_display:
+            return
+
+        resolved: set[str] = set()
+        if self.use_llm_extraction:
+            try:
+                resolved, displays = await _asyncio.wait_for(
+                    resolve_intake_slots_llm(
+                        self.state.cumulative_text,
+                        slots_by_id,
+                        unresolved[:10],
+                        need_display[:8],
+                    ),
+                    timeout=2.2,
+                )
+                changed = False
+                if resolved:
+                    merged = set(self.sop._llm_resolved) | resolved
+                    self.sop.set_llm_resolved(merged)
+                    self.sop.update_checklist(self.state)
+                    allowed = self._resolved_slot_ids()
+                if displays:
+                    changed |= merge_slot_display_values(self.state, displays, allowed_slots=allowed)
+                changed |= prune_slot_display_values(self.state, allowed)
+                if changed or resolved:
+                    self._emit_live_state(partial=False)
+            except Exception:
+                pass
+        elif self._sync_slot_displays():
+            self._emit_live_state(partial=False)
 
     def _invalidate_sop_plan(self) -> None:
         self.state.sop_plan = None
@@ -510,51 +573,6 @@ class ChronosKernel:
             {"sop_plan": self.state.sop_plan, "source": merged.source},
         )
         self._write_live(force=True)
-
-    async def _resolve_slots_async(self) -> None:
-        """Ask LLM which checklist slots are answered and fill Known/ask display text."""
-        plan = self.state.sop_plan
-        if not plan or not plan.get("slots"):
-            return
-        all_slots = list(plan["slots"])
-        unresolved = [
-            s["id"]
-            for s in all_slots
-            if s["id"] not in (self.state.incident.resolved_slots or [])
-        ]
-        import asyncio as _asyncio
-        from chronos.slot_display import merge_slot_display_values, prune_slot_display_values
-
-        allowed = self._resolved_slot_ids()
-        resolved: set[str] = set()
-        if self.use_llm_extraction:
-            from chronos.llm_guidance import resolve_slot_display_values_llm, resolve_slots_llm
-
-            try:
-                if unresolved:
-                    resolved = await _asyncio.wait_for(
-                        resolve_slots_llm(self.state.cumulative_text, unresolved[:10]),
-                        timeout=2.5,
-                    )
-                    if resolved:
-                        merged = set(self.sop._llm_resolved) | resolved
-                        self.sop.set_llm_resolved(merged)
-                        self.sop.update_checklist(self.state)
-                        allowed = self._resolved_slot_ids()
-                displays = await _asyncio.wait_for(
-                    resolve_slot_display_values_llm(
-                        self.state.cumulative_text, all_slots[:12], allowed
-                    ),
-                    timeout=3.0,
-                )
-                changed = merge_slot_display_values(self.state, displays, allowed_slots=allowed)
-                changed |= prune_slot_display_values(self.state, allowed)
-                if changed or resolved:
-                    self._emit_live_state(partial=False)
-            except Exception:
-                pass
-        elif self._sync_slot_displays():
-            self._emit_live_state(partial=False)
 
     def _resolved_slot_ids(self) -> set[str]:
         return set(self.state.incident.resolved_slots or []) | set(self.sop._llm_resolved)
@@ -781,21 +799,42 @@ class ChronosKernel:
 
     # --- internals ----------------------------------------------------------
     async def _await_turn_extraction(self, transcript: str) -> None:
-        """Wait for in-flight partial extraction, then finalize branch resolution."""
+        """Wait briefly for in-flight partial extraction, then finalize branch resolution."""
         import asyncio as _asyncio
+
+        wait_secs = float(os.getenv("CHRONOS_EXTRACTION_WAIT_SECS", "0.65"))
+        final_secs = float(os.getenv("CHRONOS_FINAL_EXTRACTION_SECS", "1.1"))
+
+        if self._last_extracted_transcript == transcript and self._last_extraction_result:
+            self._apply_extracted_state(
+                self._last_extraction_result, partial=False, transcript=transcript
+            )
+            self._emit_live_state(partial=False)
+            return
 
         existing = self._extraction_task
         if existing and not existing.done():
             self._pending_extraction_is_final = True
             try:
-                await _asyncio.wait_for(existing, timeout=2.0)
+                await _asyncio.wait_for(existing, timeout=wait_secs)
             except TimeoutError:
-                pass
-            if self._last_extracted_transcript == transcript:
+                if self._last_extraction_result:
+                    self._apply_extracted_state(
+                        self._last_extraction_result, partial=False, transcript=transcript
+                    )
+                    self._emit_live_state(partial=False)
+                return
+            if self._last_extracted_transcript == transcript and self._last_extraction_result:
+                self._apply_extracted_state(
+                    self._last_extraction_result, partial=False, transcript=transcript
+                )
+                self._emit_live_state(partial=False)
                 return
 
         if self._last_extraction_result and self._last_extracted_transcript == transcript:
-            self._apply_extracted_state(self._last_extraction_result, partial=False)
+            self._apply_extracted_state(
+                self._last_extraction_result, partial=False, transcript=transcript
+            )
             self._emit_live_state(partial=False)
             return
 
@@ -804,10 +843,16 @@ class ChronosKernel:
         self._words_at_last_extraction = len(transcript.split())
         self._pending_extraction_is_final = False
         try:
-            await _asyncio.wait_for(self._run_extraction(transcript, seq, partial=False), timeout=2.0)
+            await _asyncio.wait_for(
+                self._run_extraction(transcript, seq, partial=False), timeout=final_secs
+            )
             self._last_extracted_transcript = transcript
         except TimeoutError:
-            pass
+            if self._last_extraction_result:
+                self._apply_extracted_state(
+                    self._last_extraction_result, partial=False, transcript=transcript
+                )
+                self._emit_live_state(partial=False)
 
     def _refresh_derived_notes(self) -> None:
         from chronos.note_synth import derive_notes, merge_notes

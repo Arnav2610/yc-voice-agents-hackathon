@@ -131,6 +131,15 @@ def merge_slot_display_values(
     return changed
 
 
+def slots_missing_display(state: CallState, resolved_ids: set[str]) -> list[str]:
+    """Resolved slots that still lack an operator-facing Known/ask summary."""
+    missing: list[str] = []
+    for sid in resolved_ids:
+        if _accept(state.slot_display_values.get(sid)) is None:
+            missing.append(sid)
+    return missing
+
+
 def prune_slot_display_values(state: CallState, allowed_slots: set[str]) -> bool:
     """Drop display values for slots that are no longer resolved."""
     changed = False
