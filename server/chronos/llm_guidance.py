@@ -29,17 +29,21 @@ do risky mechanical repair.
 
 Call flow (follow strictly):
 1. While MISSING SLOTS remain: ask the RECOMMENDED NEXT QUESTION — one short sentence, one question.
-2. When fire/police/EMS response is warranted AND location is known, call dispatch_simulated_unit \
+2. When the caller gives a landmark or business name (e.g. "Y Combinator office"), call resolve_location_geocode \
+BEFORE dispatch so EMS/fire/police get a street address.
+3. When fire/police/EMS response is warranted AND location is known, call dispatch_simulated_unit \
 (fire | police | ems) BEFORE telling the caller units are en route. Never announce a dispatch that \
-is not in SIMULATED DISPATCHES in the live context.
-3. If NEW SIMULATED DISPATCH this turn: you MAY briefly say units are being sent (simulated only) — \
+is not in SIMULATED DISPATCHES in the live context. Dispatch uses the geocoded address when available.
+4. For medical calls with a known address, you MAY call find_nearest_facility(ems) for situational awareness \
+(do not read long facility names aloud — stay brief).
+5. If NEW SIMULATED DISPATCH this turn: you MAY briefly say units are being sent (simulated only) — \
 then IMMEDIATELY ask the next recommended question if any remain. Stay on the line.
-4. Human dispatcher handoff is the END of the call — ONLY when HUMAN_HANDOFF_READY is true AND you \
+6. Human dispatcher handoff is the END of the call — ONLY when HUMAN_HANDOFF_READY is true AND you \
 have NOT already announced it. Say it once, briefly, then wrap up.
-5. Do NOT mention a human dispatcher while questions remain unanswered.
-6. Do NOT repeat dispatch or handoff announcements.
-7. NEVER repeat a question the caller already answered — move to the next RECOMMENDED NEXT QUESTION.
-8. On silence or a brief pause: do NOT say "keep talking", "go ahead", or "I'm listening". Ask the next \
+7. Do NOT mention a human dispatcher while questions remain unanswered.
+8. Do NOT repeat dispatch or handoff announcements.
+9. NEVER repeat a question the caller already answered — move to the next RECOMMENDED NEXT QUESTION.
+10. On silence or a brief pause: do NOT say "keep talking", "go ahead", or "I'm listening". Ask the next \
 RECOMMENDED NEXT QUESTION from CHRONOS LIVE CONTEXT to gather missing intake information.
 
 Voice behavior: calm, brief, direct. ONE short sentence per turn when possible. No lists, no emojis."""
@@ -84,7 +88,9 @@ def build_live_context_message(ctx: dict[str, Any]) -> dict[str, str]:
     body = f"""⟦CHRONOS LIVE CONTEXT⟧ (policy-computed; follow exactly)
 Protocol: {protocol} ({plan.get('display_name') or inc.get('incident_type')})
 Incident: {inc.get('incident_type')} | risk: {inc.get('risk_level')} | confidence: {inc.get('incident_confidence')}
-Location: {inc.get('location_raw')} (needs_confirmation={inc.get('location_needs_confirmation')})
+Location (caller stated): {inc.get('location_raw')} (needs_confirmation={inc.get('location_needs_confirmation')})
+Location (geocoded for dispatch): {inc.get('location_geocoded') or '(not yet resolved — call resolve_location_geocode before dispatch if landmark only)'}
+Maps: {inc.get('location_maps_url') or 'n/a'}
 Caller safety: {inc.get('caller_safety')} | Third-party risk: {inc.get('third_party_risk')}
 Hazards: {', '.join(inc.get('hazards', [])) or 'none'}
 

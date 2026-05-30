@@ -235,7 +235,7 @@ def slot_resolved(spec: SOPSlotSpec, state, cum: str, llm_resolved: set[str] | N
     slot = spec.id
 
     if slot in ("exact_location", "location"):
-        return bool(inc.location_raw) and not inc.location_needs_confirmation
+        return bool(inc.location_raw or inc.location_geocoded) and not inc.location_needs_confirmation
     if slot == "caller_safety":
         return inc.caller_safety in ("resolved", "self_evacuated", "at_risk")
     if slot in ("trapped_person_status", "last_known_location"):

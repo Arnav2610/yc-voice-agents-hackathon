@@ -570,6 +570,101 @@ main {
 .diff .del { color: var(--crit); }
 .diff .hd { color: var(--accent); }
 
+.live-map-panel {
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  min-height: 280px;
+}
+.live-map-wrap {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  min-height: 220px;
+  overflow: hidden;
+  background: #0a0f14;
+}
+.live-map-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.live-map-tile-grid img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.live-map-pin-overlay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -100%);
+  font-size: 28px;
+  line-height: 1;
+  pointer-events: none;
+  display: none;
+  z-index: 3;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.65));
+}
+.live-map-fallback .live-map-pin-overlay {
+  display: block;
+}
+.live-map-hint {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--med);
+}
+.live-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.live-map-head h2 { margin: 0; font-size: 11.5px; }
+.live-map-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  color: var(--ok);
+  border: 1px solid rgba(54,211,153,.35);
+  border-radius: 999px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+.live-map-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #0a0f14;
+  object-fit: cover;
+  z-index: 1;
+}
+.live-map-caption {
+  padding: 8px 12px 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+  background: var(--panel2);
+  border-top: 1px solid var(--line);
+}
+.live-map-caption strong { color: var(--ink); }
+.live-map-caption a { color: var(--accent); text-decoration: none; }
+.live-map-caption a:hover { text-decoration: underline; }
+.live-map-pin { margin-right: 4px; }
+
 @media (max-width: 1100px) {
   body { overflow: auto; }
   main {

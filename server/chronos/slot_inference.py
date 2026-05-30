@@ -117,6 +117,9 @@ def infer_resolved_slots(state: CallState, *, allow_safety: bool = True) -> set[
     if inc.location_raw and not inc.location_needs_confirmation:
         resolved.add("exact_location")
         resolved.add("location")
+    elif inc.location_geocoded and not inc.location_needs_confirmation:
+        resolved.add("exact_location")
+        resolved.add("location")
 
     if allow_safety and inc.caller_safety in ("resolved", "self_evacuated", "at_risk"):
         resolved.add("caller_safety")
