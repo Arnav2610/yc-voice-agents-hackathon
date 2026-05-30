@@ -1,16 +1,16 @@
 # Chronos 911
 
 **Voice Agent for 911 Calls** 
+
 Chronos listens to live callers, runs structured emergency intake, and guides a voice agent.
 
 > ⚠️  **Simulation only.**
----
 
-## The idea
+## The Idea
 
 Most voice agents wait for the caller to finish speaking, then react turn-by-turn. Emergency intake is time-sensitive: seconds matter, callers ramble, and dispatchers need structured facts *while* the person is still talking.
 
-Chronos treats a 911 call as a **continuous stream** — partial speech updates the dashboard immediately, LLM extraction runs mid-utterance, and the copilot always knows the **single best next question** to ask. A separate **live operator dashboard** shows incident state, SOP progress, memory hits, and simulated unit dispatch in real time.
+Chronos treats a 911 call as a **continuous stream** Partial speech updates the dashboard immediately, LLM extraction runs mid-utterance, and the copilot always knows the **single best next question** to ask. A separate **live operator dashboard** shows incident state, Structured Operating Procedure (SOP) progress, memory hits, and simulated unit dispatch in real time.
 
 ---
 
@@ -24,20 +24,20 @@ Chronos treats a 911 call as a **continuous stream** — partial speech updates 
 
 ### Official 911 SOP–driven intake table
 
-- Seeded with **Cowley County Emergency Communications (CCEC) structured SOPs** — general call-taking, fire/medical dispatch, hazmat, active threat, and more.
-- On classification, Nemotron **generates a call-specific checklist** (Status · Data point · Known / ask) aligned to the active protocol.
-- **Nemotron extracts structured state** from the full transcript — incident type, location, hazards, safety branches, resolved slots — and writes **operator-facing summaries** into the Known / ask column only when a slot is actually answered.
+- Provided with **Cowley County Emergency Communications (CCEC) structured SOPs**.
+- On SOP classification, Nemotron generates a call-specific checklist aligned to the active protocol using **real-world 911 dispatcher guidelines**.
+- **Nemotron extracts structured states** reliably from partial and full transcripts: incident type, location, hazards, safety branches, resolved slots.
 
 ### Policy-grounded voice agent
 
-- The speaking LLM does **not** freestyle safety decisions. Each turn gets a **CHRONOS LIVE CONTEXT** block: computed incident state, missing slots, recommended next question, forbidden phrases, and dispatch status.
+- The speaking LLM does **not** freestyle safety decisions. Each turn gets a **live context block**: computed incident state, missing slots, recommended next question, forbidden phrases, and dispatch status.
 - **Separate caller-safety vs. third-party-safety branches** — a caller evacuating does not auto-close “someone still inside” risk.
 - **Intelligent reclassification** (e.g. tongue injury / bleeding → medical, not active threat).
 
 ### Simulated emergency dispatch
 
 - When policy + location warrant it, the voice agent calls **`dispatch_simulated_unit`** (fire · police · EMS) via a Pipecat LLM tool.
-- The dashboard shows a **prominent dispatch banner** and unit log — training only, never real CAD.
+- The dashboard shows a **prominent dispatch banner** and unit log. (fake, of course)
 
 ### Location resolution
 
@@ -79,9 +79,9 @@ Chronos treats a 911 call as a **continuous stream** — partial speech updates 
 
 ```
 Caller ──▶ Nemotron ASR (streaming) ──▶ Chronos kernel ──▶ Live dashboard
-              │ partial + final              │  SOP engine · memory · policy
+              │ partial + final                    │  SOP engine · memory · policy
               ▼                              ▼
-         LLM extraction              Nemotron voice LLM ◀── CHRONOS LIVE CONTEXT
+         LLM extraction              Nemotron voice LLM ◀── Supermemory Context (Cekura used to fine)
          (mid-utterance)                    │
                                             ▼
                                        Gradium TTS ──▶ Caller
@@ -126,18 +126,4 @@ server/
   Makefile                # seed · bot · dash · improve · test · …
 ```
 
----
 
-## Further reading
-
-- **[CHRONOS_README.md](./CHRONOS_README.md)** — architecture deep-dive, policy patch ops, file map
-- **[DEMO_SCRIPT.md](./DEMO_SCRIPT.md)** — judge demo walkthrough
-- **[LIVE_DEMO.md](./LIVE_DEMO.md)** — live call + Cekura eval notes
-
----
-
-## Hackathon context
-
-Built at the **YC Voice Agents Hackathon** (Cekura × Daily × NVIDIA × AWS × Twilio). The repo retains the original Pipecat starter bots (`bot-gpt.py`, `bot-nemotron.py`, Field & Flower demo) under `server/`; **Chronos 911** is the hackathon project.
-
-**Team / license:** see repo headers. Simulation disclaimer applies to all demos.
