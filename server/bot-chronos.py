@@ -12,10 +12,16 @@ Pipeline: NVIDIA Nemotron ASR Streaming (STT) -> Chronos user observer ->
 Nemotron-3-Super (LLM, grounded by policy) -> Chronos response observer ->
 Gradium (TTS). A FastAPI dashboard runs in-process on CHRONOS_DASHBOARD_PORT.
 
-Run locally::
+Run locally (browser WebRTC)::
 
     uv run bot-chronos.py
     # open http://localhost:7860  (WebRTC call)  and  http://localhost:7861  (dashboard)
+
+Run for Twilio phone calls (requires ngrok + Twilio number)::
+
+    ngrok http 7860
+    make bot-twilio PROXY=your-subdomain.ngrok-free.app
+    # paste TwiML from: make twilio-twiml PROXY=...
 """
 
 import os
@@ -72,14 +78,17 @@ def _ensure_dashboard() -> None:
             logger.warning(f"Dashboard failed to start: {e}")
 
 
-def _build_stt():
-    """NVIDIA Nemotron ASR streaming by default; Gradium STT as a fallback."""
+def _build_stt(*, telephony: bool = False):
+    """NVIDIA Nemotron ASR streaming by default; Gradium STT for Twilio (8 kHz μ-law)."""
     which = os.getenv("CHRONOS_STT", "nvidia").lower()
+    if telephony:
+        which = "gradium"
     if which == "gradium":
         from pipecat.services.gradium.stt import GradiumSTTService
         from pipecat.transcriptions.language import Language
 
-        logger.info("Chronos STT: Gradium")
+        label = "Gradium (Twilio telephony — 8 kHz)" if telephony else "Gradium"
+        logger.info(f"Chronos STT: {label}")
         return GradiumSTTService(
             api_key=os.environ["GRADIUM_API_KEY"],
             settings=GradiumSTTService.Settings(language=Language.EN),
@@ -94,20 +103,26 @@ def _build_stt():
 async def run_bot(
     transport: BaseTransport,
     from_number: str | None = None,
+    to_number: str | None = None,
+    telephony: bool = False,
     audio_in_sample_rate: int = 16000,
     audio_out_sample_rate: int = 24000,
 ):
     """Main Chronos bot logic for one (simulated) call."""
     _ensure_dashboard()
     call_id = f"call_{uuid.uuid4().hex[:8]}"
-    logger.info(f"Starting Chronos call {call_id}")
+    logger.info(f"Starting Chronos call {call_id} telephony={telephony} from={from_number}")
 
     memory = ChronosMemoryClient(api_key=os.getenv("SUPERMEMORY_API_KEY"))
     logger.info(f"Chronos memory mode: {memory.mode}")
     kernel = ChronosKernel(call_id=call_id, memory_client=memory, event_store=STORE)
+    kernel.state.caller_from = from_number
+    kernel.state.caller_to = to_number
+    if from_number:
+        kernel._emit("caller_identified", {"from_number": from_number, "to_number": to_number})
     set_live_kernel(kernel)
 
-    stt = _build_stt()
+    stt = _build_stt(telephony=telephony)
 
     # Realtime voice: thinking OFF (avoid latency + any CoT leak into speech).
     voice_thinking = config._flag("CHRONOS_VOICE_THINKING", False)
@@ -166,13 +181,15 @@ async def run_bot(
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
-        logger.info("Caller connected (simulated)")
+        channel = "phone" if telephony else "webrtc"
+        logger.info(f"Caller connected ({channel})")
         context.add_message(
             {
                 "role": "user",
                 "content": (
-                    "A simulated caller just connected to the Chronos training line. "
-                    f'Greet them by saying exactly: "{config.SPOKEN_GREETING}"'
+                    "A simulated caller just connected to the Chronos training line"
+                    + (f" from phone number {from_number}." if from_number else ".")
+                    + f' Greet them by saying exactly: "{config.SPOKEN_GREETING}"'
                 ),
             }
         )
@@ -196,6 +213,8 @@ async def bot(runner_args: RunnerArguments):
     """Entry point used by the Pipecat runner."""
     _ensure_dashboard()
     from_number: str | None = None
+    to_number: str | None = None
+    telephony = False
     transport_overrides: dict = {}
 
     if os.environ.get("ENV") != "local":
@@ -217,12 +236,19 @@ async def bot(runner_args: RunnerArguments):
                 ),
             )
         case WebSocketRunnerArguments():
-            # Twilio path. NOTE: Twilio is 8 kHz; NVIDIA ASR needs 16 kHz, so set
-            # CHRONOS_STT=gradium when using telephony. Kept intact but the
-            # supported demo path is local WebRTC.
+            telephony = True
             transport_overrides["audio_in_sample_rate"] = 8000
             transport_overrides["audio_out_sample_rate"] = 8000
+
             _, call_data = await parse_telephony_websocket(runner_args.websocket)
+            from chronos.twilio_utils import get_call_info
+
+            call_info = await get_call_info(call_data["call_id"])
+            if call_info:
+                from_number = call_info.get("from_number")
+                to_number = call_info.get("to_number")
+                logger.info(f"Twilio call {call_data['call_id']} from {from_number} to {to_number}")
+
             serializer = TwilioFrameSerializer(
                 stream_sid=call_data["stream_id"],
                 call_sid=call_data["call_id"],
@@ -243,7 +269,13 @@ async def bot(runner_args: RunnerArguments):
             logger.error(f"Unsupported runner arguments type: {type(runner_args)}")
             return
 
-    await run_bot(transport, from_number=from_number, **transport_overrides)
+    await run_bot(
+        transport,
+        from_number=from_number,
+        to_number=to_number,
+        telephony=telephony,
+        **transport_overrides,
+    )
 
 
 if __name__ == "__main__":

@@ -147,7 +147,21 @@ make test           # unit tests + baseline suite
 | Supermemory (memory) | **Live** REST (`/v3/documents` write, `/v4/search` hybrid read) + deterministic local fallback |
 | Cekura (eval) | Driven via the Cekura MCP / `/cekura-report`; deterministic regression runner is the always-available backbone; seeded fallback report included |
 | CAD / SMS / dispatch | **Mocked** — `chronos/mocks.py`, returns fake `SIM-*` ids, never contacts anything real |
-| Telephony | Local **WebRTC** (Twilio/Pipecat-Cloud path left intact but out of scope for the demo) |
+| Telephony | **WebRTC** (browser) or **Twilio** phone (Media Streams via ngrok or Pipecat Cloud) |
+
+### Twilio phone calls (local dev)
+
+1. Add to `.env`: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PUBLIC_URL` (your ngrok host, no `https://`).
+2. In one terminal: `ngrok http 7860`
+3. In another: `cd server && make bot-twilio PROXY=YOUR_NGROK_HOST`
+4. Configure your Twilio number **Voice → A call comes in** → **Webhook** `https://YOUR_NGROK_HOST/` (HTTP POST).  
+   Or create a [TwiML Bin](https://www.twilio.com/docs/serverless/twiml-bins) with `make twilio-twiml PROXY=...`.
+5. Dial your Twilio number. Live dashboard: `http://localhost:7861`.
+
+Twilio uses **Gradium STT** automatically (8 kHz μ-law). WebRTC keeps **NVIDIA ASR**.
+
+**Pipecat Cloud:** `pc cloud secrets set chronos-911-secrets --file ../.env && pc cloud deploy`  
+Then point Twilio at `wss://api.pipecat.daily.co/ws/twilio` with `_pipecatCloudServiceHost` = `chronos-911.YOUR_ORG` (see root README).
 
 ## Cekura (live — ran end-to-end)
 

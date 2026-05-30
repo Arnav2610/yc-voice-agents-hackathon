@@ -131,6 +131,8 @@ class CallState:
 
     call_id: str
     scenario_id: str | None = None
+    caller_from: str | None = None  # E.164 when connected via Twilio
+    caller_to: str | None = None
     incident: IncidentState = field(default_factory=IncidentState)
     memory: MemoryContext = field(default_factory=MemoryContext)
     turns: list[str] = field(default_factory=list)  # caller final turns
@@ -212,6 +214,8 @@ class CallState:
         return {
             "call_id": self.call_id,
             "scenario_id": self.scenario_id,
+            "caller_from": self.caller_from,
+            "caller_to": self.caller_to,
             "incident": self.incident.to_dict(),
             "memory": self.memory.to_dict(),
             "turns": self.turns,
