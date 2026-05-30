@@ -38,8 +38,23 @@ then IMMEDIATELY ask the next recommended question if any remain. Stay on the li
 have NOT already announced it. Say it once, briefly, then wrap up.
 5. Do NOT mention a human dispatcher while questions remain unanswered.
 6. Do NOT repeat dispatch or handoff announcements.
+7. NEVER repeat a question the caller already answered — move to the next RECOMMENDED NEXT QUESTION.
+8. On silence or a brief pause: do NOT say "keep talking", "go ahead", or "I'm listening". Ask the next \
+RECOMMENDED NEXT QUESTION from CHRONOS LIVE CONTEXT to gather missing intake information.
 
 Voice behavior: calm, brief, direct. ONE short sentence per turn when possible. No lists, no emojis."""
+
+CHRONOS_INCOMPLETE_SHORT_PROMPT = """The caller paused briefly. Do NOT tell them to keep talking, "go ahead", or "I'm listening".
+
+Read CHRONOS LIVE CONTEXT. If MISSING SLOTS remain, respond with ✓ followed by the RECOMMENDED NEXT QUESTION \
+exactly (one short calm sentence). If intake is complete, ✓ ask if anything else is urgent.
+
+Never repeat a question already answered in the transcript."""
+
+CHRONOS_INCOMPLETE_LONG_PROMPT = """The caller has been quiet. Do NOT say "take your time" or "I'm listening" without helping.
+
+Read CHRONOS LIVE CONTEXT. Respond with ✓ followed by the RECOMMENDED NEXT QUESTION to gather the next \
+missing intake detail. One calm sentence only."""
 
 
 def build_live_context_message(ctx: dict[str, Any]) -> dict[str, str]:
@@ -279,52 +294,61 @@ Rules:
 - weapon_info: resolved if weapon mentioned OR caller confirms no weapon.
 - trapped_person_status: resolved ONLY if clearly no one inside OR everyone accounted for.
 - Do NOT resolve trapped_person_status just because caller evacuated.
+- For ANY checklist slot id (including custom LLM slots): mark resolved if the caller clearly answered \
+that topic anywhere in the transcript, even with informal wording (e.g. "worse and worse" answers bleeding severity).
 """
 
 _SLOT_DISPLAY_PROMPT = """\
 Transcript:
 {transcript}
 
-For each checklist item, write an operator-facing summary ONLY if the caller already stated \
-relevant facts anywhere in the transcript. Omit slots with no caller-provided information.
+The following checklist slots are RESOLVED — the caller already provided enough information. \
+Write one concise operator-facing summary per slot (max 120 chars). Paraphrase clearly for a \
+911 call-taker; use the caller's facts but not raw transcript dumps.
 
-Checklist:
+RESOLVED slots (only output these keys):
 {slots}
 
 Return JSON only:
-{{"slot_values": {{"slot_id": "specific detail using caller words (max 120 chars)", ...}}}}
+{{"slot_values": {{"slot_id": "intelligent operator summary", ...}}}}
 
 Rules:
-- Quote or paraphrase the caller's actual words — never generic placeholders like "Confirmed", \
-"Weapon mentioned", or "Injuries reported".
-- exact_location / location: full address, building, room, or landmark as stated.
-- caller_safety: where the caller is and whether they feel safe or still at risk.
-- threat_description: what is happening in plain language from the caller.
-- suspect_location: where the suspect/intruder is now (door, inside, fled, etc.).
-- weapon_info: weapon type if seen/threatened, OR explicit denial if caller says no weapon.
-- callback_number: caller name and phone/callback digits if given.
-- consciousness / breathing / injury_status: patient status using caller's description.
-- trapped_person_status: who may still be inside or that everyone is out.
-- Only include keys from the checklist above; skip unknown slots.
+- ONLY include slot ids listed above. Never invent values for open/unresolved slots.
+- Never use generic placeholders like "Confirmed", "Weapon mentioned", or "Injuries reported".
+- exact_location / location: address, building, room, or landmark as stated.
+- caller_safety: where caller is and whether safe or still at risk.
+- threat_description / suspect_location / weapon_info: plain language from caller.
+- callback_number: name and phone digits if given.
+- consciousness / breathing / injury_status: patient status in caller's words.
+- Custom slot ids: summarize only what the caller said about that specific question.
 """
 
 
 async def resolve_slot_display_values_llm(
-    transcript: str, slots: list[dict[str, str]]
+    transcript: str,
+    slots: list[dict[str, str]],
+    resolved_ids: set[str],
 ) -> dict[str, str]:
-    """Ask LLM for operator-facing Known/ask cell text per checklist slot."""
+    """Ask LLM for Known/ask summaries — resolved slots only."""
     import asyncio
 
-    if not slots or not transcript.strip():
+    if not resolved_ids or not slots or not transcript.strip():
         return {}
     try:
         lines = []
         for s in slots:
             sid = s.get("id") or s.get("slot") or ""
+            if sid not in resolved_ids:
+                continue
             label = s.get("label") or sid.replace("_", " ")
             question = s.get("question") or ""
             lines.append(f"- {sid} ({label}): {question}")
-        prompt = _SLOT_DISPLAY_PROMPT.format(transcript=transcript[-2500:], slots="\n".join(lines))
+        if not lines:
+            return {}
+        prompt = _SLOT_DISPLAY_PROMPT.format(
+            transcript=transcript[-2500:],
+            slots="\n".join(lines),
+        )
         raw = await asyncio.to_thread(
             _chat,
             [
@@ -332,17 +356,20 @@ async def resolve_slot_display_values_llm(
                 {"role": "user", "content": prompt},
             ],
             False,
-            450,
+            500,
         )
         data = _extract_json(raw)
         if not data or not isinstance(data.get("slot_values"), dict):
             return {}
         out: dict[str, str] = {}
         for k, v in data["slot_values"].items():
+            key = str(k)
+            if key not in resolved_ids:
+                continue
             val = str(v or "").strip()
             if val and val.lower() not in ("null", "none", "unknown", "n/a", "confirmed", "provided"):
                 if not _GENERIC_SLOT_VALUE(val):
-                    out[str(k)] = val
+                    out[key] = val
         return out
     except Exception:
         return {}

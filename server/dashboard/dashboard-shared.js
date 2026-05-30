@@ -178,6 +178,17 @@ const ChronosUI = (() => {
     return low.endsWith(" mentioned") || low.endsWith(" reported");
   }
 
+  function intakeKnownValue(item, snap, noteMap) {
+    if (!item.resolved) return null;
+    const displays = snap.slot_display_values || {};
+    if (displays[item.slot] && !isGenericSlotValue(displays[item.slot])) return displays[item.slot];
+    const fromNotes = lookupNoteValue(SLOT_NOTE_KEYS[item.slot] || [], noteMap);
+    if (fromNotes && !isGenericSlotValue(fromNotes)) return fromNotes;
+    const fromState = slotValueFromState(item.slot, snap);
+    if (fromState && !isGenericSlotValue(fromState)) return fromState;
+    return null;
+  }
+
   function slotKnownValue(slot, snap, noteMap) {
     const displays = snap.slot_display_values || {};
     if (displays[slot] && !isGenericSlotValue(displays[slot])) return displays[slot];
@@ -216,9 +227,8 @@ const ChronosUI = (() => {
 
   function consumedNoteKeys(checklist, snap, noteMap) {
     const used = new Set();
-    for (const item of (checklist || []).filter((c) => c.active)) {
-      const val =
-        slotKnownValue(item.slot, snap, noteMap) || lookupNoteValue(SLOT_NOTE_KEYS[item.slot] || [], noteMap);
+    for (const item of (checklist || []).filter((c) => c.active && c.resolved)) {
+      const val = intakeKnownValue(item, snap, noteMap);
       if (val) {
         for (const k of noteKeysForSlot(item.slot)) used.add(k);
       }
@@ -264,8 +274,7 @@ const ChronosUI = (() => {
     const rows = sorted
       .map((c) => {
         const isRec = c.slot === recommendedSlot;
-        const known =
-          slotKnownValue(c.slot, snap, noteMap) || lookupNoteValue(SLOT_NOTE_KEYS[c.slot] || [], noteMap);
+        const known = intakeKnownValue(c, snap, noteMap);
         const status = c.resolved ? "Done" : isRec ? "Next" : "Open";
         const rowCls = ["sop-row", c.resolved ? "done" : "", isRec ? "rec" : ""].filter(Boolean).join(" ");
         const mark = c.resolved ? "✓" : isRec ? "▶" : "○";
@@ -302,8 +311,7 @@ const ChronosUI = (() => {
     let rows = sorted
       .map((c) => {
         const isRec = c.slot === recommendedSlot;
-        const known =
-          slotKnownValue(c.slot, snap, noteMap) || lookupNoteValue(SLOT_NOTE_KEYS[c.slot] || [], noteMap);
+        const known = intakeKnownValue(c, snap, noteMap);
         const status = c.resolved ? "Done" : isRec ? "Next" : "Open";
         const rowCls = ["sop-row", c.resolved ? "done" : "", isRec ? "rec" : ""].filter(Boolean).join(" ");
         const mark = c.resolved ? "✓" : isRec ? "▶" : "○";

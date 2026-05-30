@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from chronos.state import CallState
 
 _INFO_SLOTS = frozenset({
@@ -17,6 +19,93 @@ _INFO_SLOTS = frozenset({
     "breathing",
     "injury_status",
 })
+
+_FILLERS = frozenset({"uh", "um", "hmm", "er", "ah"})
+
+
+def _substantive_turn(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    words = [w for w in re.split(r"\s+", t) if w and w not in _FILLERS]
+    if len(words) >= 2:
+        return True
+    if len(words) == 1 and words[0] not in _FILLERS:
+        return True
+    return any(
+        p in t
+        for p in (
+            "yes",
+            "yeah",
+            "yep",
+            "no",
+            "nope",
+            "awake",
+            "worse",
+            "better",
+            "heavy",
+            "slowing",
+            "bleeding",
+            "help",
+        )
+    )
+
+
+def infer_medical_slots_from_text(text: str) -> set[str]:
+    """Resolve standard medical slots from caller wording."""
+    t = (text or "").lower()
+    resolved: set[str] = set()
+    if re.search(r"\b(awake|responsive|conscious|i'?m awake|still awake)\b", t):
+        resolved.add("consciousness")
+    if re.search(r"\b(not breathing|can'?t breathe|trouble breathing|breathing normally|hard to breathe)\b", t):
+        resolved.add("breathing")
+    if re.search(
+        r"\b(bleeding|blood|injured|hurt|pain|cut|burn|tongue|mouth)\b",
+        t,
+    ) or (
+        re.search(r"\b(worse|better|slowing|flowing|heavy)\b", t)
+        and re.search(r"\b(bleed|blood|hurt|injur|pain|tongue|mouth)\b", t)
+    ):
+        resolved.add("injury_status")
+    return resolved
+
+
+def slot_answered_by_turn(slot_id: str | None, turn_text: str, state: CallState) -> bool:
+    """True when this caller turn substantively answers the slot the agent just asked."""
+    if not slot_id or not _substantive_turn(turn_text):
+        return False
+    t = turn_text.lower()
+    sid = slot_id.lower()
+
+    if sid in ("consciousness",):
+        return bool(
+            re.search(r"\b(awake|responsive|conscious|passed out|unconscious|not awake|alert)\b", t)
+        ) or (
+            _substantive_turn(t) and bool(re.search(r"\b(yeah|yes|yep|no|nope|for now)\b", t))
+        )
+    if sid in ("breathing",):
+        return bool(
+            re.search(r"\b(breath|breathing|breathe|choking|gasp)\b", t)
+        ) or _substantive_turn(t)
+    if sid in ("injury_status",) or "bleed" in sid or "injur" in sid or "mouth" in sid:
+        return bool(
+            re.search(r"\b(bleed|blood|worse|better|slow|heavy|hurt|pain|injur|cut|burn|tongue|mouth)\b", t)
+        )
+    if sid in ("caller_safety",):
+        return bool(re.search(r"\b(safe|outside|at risk|scared|trapped|help)\b", t)) or _substantive_turn(t)
+    if sid in ("exact_location", "location"):
+        return bool(state.incident.location_raw) or len(t.split()) >= 3
+    if sid in ("callback_number",):
+        return sum(c.isdigit() for c in t) >= 7 or bool(re.search(r"\bmy name is\b", t))
+    if sid in ("weapon_info",):
+        return bool(re.search(r"\b(knife|gun|weapon|armed|no weapon|don'?t see)\b", t))
+    if sid in ("threat_description",):
+        return len(t.split()) >= 4
+    if sid in ("suspect_location",):
+        return bool(re.search(r"\b(door|inside|outside|left|here|there|gone)\b", t))
+
+    # Dynamic / LLM-tailored slots: any substantive reply counts as answered.
+    return _substantive_turn(turn_text)
 
 
 def infer_resolved_slots(state: CallState, *, allow_safety: bool = True) -> set[str]:
@@ -71,6 +160,8 @@ def infer_resolved_slots(state: CallState, *, allow_safety: bool = True) -> set[
         resolved.add("threat_description")
     if any(n.field in ("suspect_location", "intruder_location", "door_status") for n in notes):
         resolved.add("suspect_location")
+
+    resolved |= infer_medical_slots_from_text(state.cumulative_text)
 
     return resolved
 

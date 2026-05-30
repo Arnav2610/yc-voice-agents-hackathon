@@ -1,4 +1,4 @@
-"""Derive operator-facing checklist cell text from transcript + structured notes."""
+"""Operator-facing Known/ask cell text — only for resolved checklist slots."""
 
 from __future__ import annotations
 
@@ -31,69 +31,111 @@ def _accept(val: str | None) -> str | None:
     return v
 
 
-def derive_slot_display_values(state: CallState) -> dict[str, str]:
-    """Build Known/ask display text from notes and incident state (offline / fallback)."""
+def _filter_keys(values: dict[str, str], allowed_slots: set[str] | None) -> dict[str, str]:
+    if allowed_slots is None:
+        return values
+    return {k: v for k, v in values.items() if k in allowed_slots}
+
+
+def derive_slot_display_values(
+    state: CallState, *, allowed_slots: set[str] | None = None
+) -> dict[str, str]:
+    """Build display text from notes/state for resolved slots only (offline fallback)."""
     inc = state.incident
     text = state.cumulative_text
     out: dict[str, str] = {}
 
     if inc.location_raw:
-        loc = inc.location_raw
-        if inc.location_needs_confirmation:
-            loc += " (confirm exact address)"
-        out["exact_location"] = loc
-        out["location"] = loc
+        if allowed_slots is None or "exact_location" in allowed_slots or "location" in allowed_slots:
+            loc = inc.location_raw
+            if inc.location_needs_confirmation:
+                loc += " (confirm exact address)"
+            if allowed_slots is None or "exact_location" in allowed_slots:
+                out["exact_location"] = loc
+            if allowed_slots is None or "location" in allowed_slots:
+                out["location"] = loc
 
-    safety = {
-        "self_evacuated": "Caller evacuated / outside",
-        "resolved": "Caller reports they are safe",
-        "at_risk": "Caller still at risk / in danger",
-    }.get(inc.caller_safety)
-    if safety:
-        out["caller_safety"] = safety
+    if allowed_slots is None or "caller_safety" in allowed_slots:
+        safety = {
+            "self_evacuated": "Caller evacuated / outside",
+            "resolved": "Caller reports they are safe",
+            "at_risk": "Caller still at risk / in danger",
+        }.get(inc.caller_safety)
+        if safety and inc.caller_safety != "unknown":
+            out["caller_safety"] = safety
 
-    if inc.third_party_risk == "active":
-        out["trapped_person_status"] = "Someone may still be inside or unable to exit"
-    elif inc.third_party_risk == "resolved":
-        out["trapped_person_status"] = "All persons accounted for"
+    if allowed_slots is None or "trapped_person_status" in allowed_slots:
+        if inc.third_party_risk == "active":
+            out["trapped_person_status"] = "Someone may still be inside or unable to exit"
+        elif inc.third_party_risk == "resolved":
+            out["trapped_person_status"] = "All persons accounted for"
 
-    phone = _extract_phone(text)
-    names = [n.value for n in state.structured_notes if n.field in ("caller_name", "name", "callback_name")]
-    if phone and names:
-        out["callback_number"] = f"{names[-1]} · {phone}"
-    elif phone:
-        out["callback_number"] = phone
+    if allowed_slots is None or "callback_number" in allowed_slots:
+        phone = _extract_phone(text)
+        names = [
+            n.value for n in state.structured_notes if n.field in ("caller_name", "name", "callback_name")
+        ]
+        if phone and names:
+            out["callback_number"] = f"{names[-1]} · {phone}"
+        elif phone:
+            out["callback_number"] = phone
 
+    slot_field_map = {
+        ("threat_type", "threat_description", "incident_description", "description"): "threat_description",
+        ("suspect_location", "intruder_location", "door_status"): "suspect_location",
+        ("weapon_type", "weapon", "armed"): "weapon_info",
+    }
     for n in state.structured_notes:
-        fld = n.field
         val = _accept(n.value)
         if not val:
             continue
-        if fld in ("threat_type", "threat_description", "incident_description", "description"):
-            out["threat_description"] = val
-        elif fld in ("suspect_location", "intruder_location", "door_status"):
-            out["suspect_location"] = val
-        elif fld in ("weapon_type", "weapon", "armed"):
-            out["weapon_info"] = val
-        elif fld in ("injury", "injury_status") and n.category == "medical":
-            out["injury_status"] = val
-        elif fld in ("breathing",) and n.category == "medical":
-            out["breathing"] = val
-        elif fld in ("consciousness",) and n.category == "medical":
-            out["consciousness"] = val
+        target = None
+        for fields, slot_id in slot_field_map.items():
+            if n.field in fields:
+                target = slot_id
+                break
+        if n.category == "medical":
+            if n.field in ("injury", "injury_status"):
+                target = target or "injury_status"
+            elif n.field == "breathing":
+                target = target or "breathing"
+            elif n.field == "consciousness":
+                target = target or "consciousness"
+        if not target:
+            continue
+        if allowed_slots is not None and target not in allowed_slots:
+            continue
+        out[target] = val
 
-    return out
+    return _filter_keys({k: v for k, v in out.items() if _accept(v)}, allowed_slots)
 
 
-def merge_slot_display_values(state: CallState, incoming: dict[str, str]) -> bool:
-    """Merge new slot display values; returns True if anything changed."""
+def merge_slot_display_values(
+    state: CallState,
+    incoming: dict[str, str],
+    *,
+    allowed_slots: set[str] | None = None,
+) -> bool:
+    """Merge display values; ignore keys for unresolved slots."""
     changed = False
     for k, v in incoming.items():
+        key = str(k)
+        if allowed_slots is not None and key not in allowed_slots:
+            continue
         val = _accept(v)
         if not val:
             continue
-        key = str(k)
         if state.slot_display_values.get(key) != val:
             state.slot_display_values[key] = val
+            changed = True
+    return changed
+
+
+def prune_slot_display_values(state: CallState, allowed_slots: set[str]) -> bool:
+    """Drop display values for slots that are no longer resolved."""
+    changed = False
+    for key in list(state.slot_display_values.keys()):
+        if key not in allowed_slots:
+            del state.slot_display_values[key]
             changed = True
     return changed
