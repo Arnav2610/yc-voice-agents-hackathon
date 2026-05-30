@@ -83,3 +83,18 @@ def escalate_to_human(reason: str) -> dict[str, Any]:
         "reason": reason,
         "note": "Recommend a human dispatcher take over. Simulated handoff — no real dispatch.",
     }
+
+
+def dispatch_unit(unit_type: str, location: str | None, reason: str, incident_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Simulate sending fire, police, or EMS while the call-taker stays on the line."""
+    seed = f"{unit_type}|{location}|{reason}|{incident_state.get('incident_type') if incident_state else ''}"
+    labels = {"fire": "Fire/Rescue", "police": "Law Enforcement", "ems": "EMS/Ambulance"}
+    return {
+        "dispatch_id": _fake_id(f"SIM-{unit_type.upper()}", seed),
+        "unit_type": unit_type,
+        "unit_label": labels.get(unit_type, unit_type),
+        "location": location,
+        "reason": reason,
+        "simulated": True,
+        "note": f"Simulated {labels.get(unit_type, unit_type)} dispatch for training — no real responders sent.",
+    }

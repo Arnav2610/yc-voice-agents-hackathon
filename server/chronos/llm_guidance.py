@@ -1,12 +1,8 @@
 """LLM prompting for Chronos.
 
-In the LIVE voice path, the Pipecat LLM (Nemotron) is the speaker. Chronos does
-NOT let the LLM decide safety — it injects a deterministic CHRONOS LIVE CONTEXT
-message each turn and constrains the model to voice the policy-computed next
-question and escalation. The system prompt encodes hard safety constraints.
-
-Offline helpers (failure-classifier / patch-rationale) call Nemotron directly
-over its OpenAI-compatible endpoint; they are optional and degrade gracefully.
+In the LIVE voice path, the Pipecat LLM (Nemotron) is the speaker. Chronos injects
+a CHRONOS LIVE CONTEXT message each turn with policy-computed state, the next
+question, dispatch status, and hard constraints.
 """
 
 from __future__ import annotations
@@ -19,51 +15,86 @@ CHRONOS_SYSTEM_PROMPT = """You are Chronos 911, a SIMULATED emergency-call copil
 evaluation. You are not a real dispatcher and must say so if asked. Every call is a simulation.
 
 You will receive a CHRONOS LIVE CONTEXT block before each caller turn. It contains the \
-policy-computed incident state, the single recommended next question, missing safety slots, \
-retrieved institutional memory, and hard constraints. TREAT IT AS GROUND TRUTH and follow it.
+policy-computed incident state, the single recommended next question, missing SOP slots, \
+simulated unit dispatches, structured notes, and hard constraints. TREAT IT AS GROUND TRUTH.
 
 Hard safety constraints (never violate):
-- Never claim to be a real 911 dispatcher; never say help has been dispatched (a mock tool may \
-mark something simulated).
+- Never claim to be a real 911 dispatcher.
 - Never provide medical diagnosis or instruct medication.
 - Never give police tactical instructions.
 - Never tell a caller to re-enter a dangerous building, approach fire/smoke/an active threat, or \
 do risky mechanical repair.
 - Never promise an ETA or outcome.
-- Always recommend a human dispatcher for fire, smoke, gas smell, trapped person, injury, active \
-violence, a child in danger, an uncertain location with danger, or a medical crisis.
-- Keep caller safety and third-party (someone-else-inside) safety as SEPARATE branches. A caller \
-getting out does NOT resolve whether someone else is still inside.
+- Keep caller safety and third-party (someone-else-inside) safety as SEPARATE branches.
 
-Voice behavior:
-- Be calm, brief, and direct. ONE short sentence per turn. Ask ONE question at a time.
-- If CHRONOS LIVE CONTEXT gives a recommended question, ask THAT next, phrased naturally.
-- If escalation is required, briefly say you're bringing in a human dispatcher.
-- No lists, no emojis, plain spoken language."""
+Call flow (follow strictly):
+1. While MISSING SLOTS remain: ask the RECOMMENDED NEXT QUESTION — one short sentence, one question.
+2. If NEW SIMULATED DISPATCH this turn: you MAY briefly say units are being sent (e.g. "I've notified \
+fire and EMS") — simulated only — then IMMEDIATELY ask the next recommended question if any remain. \
+Stay on the line.
+3. Human dispatcher handoff is the END of the call — ONLY when HUMAN_HANDOFF_READY is true AND you \
+have NOT already announced it. Say it once, briefly, then wrap up.
+4. Do NOT mention a human dispatcher while questions remain unanswered.
+5. Do NOT repeat dispatch or handoff announcements.
+
+Voice behavior: calm, brief, direct. ONE short sentence per turn when possible. No lists, no emojis."""
 
 
 def build_live_context_message(ctx: dict[str, Any]) -> dict[str, str]:
     """Render the per-turn grounding message injected before the caller's turn."""
     inc = ctx.get("incident_state", {})
+    plan = ctx.get("sop_plan") or {}
     mem_lines = []
     for m in ctx.get("memory_results", [])[:4]:
         mem_lines.append(f"  - [{m.get('memory_type')}] {m.get('content', '')[:200]}")
+    checklist_rows = []
+    for c in ctx.get("sop_checklist", []):
+        if not c.get("active"):
+            continue
+        status = "DONE" if c.get("resolved") else ("NEXT" if c.get("slot") == ctx.get("recommended_slot") else "OPEN")
+        checklist_rows.append(f"  | {status} | {c.get('label', c.get('slot'))} | {c.get('question', '')} |")
+    note_lines = []
+    for n in ctx.get("structured_notes", [])[:12]:
+        note_lines.append(f"  - [{n.get('category')}] {n.get('field')}: {n.get('value')}")
+    dispatch_lines = []
+    for d in ctx.get("dispatches", []):
+        dispatch_lines.append(f"  - {d.get('unit_type', 'unit').upper()} @ {d.get('location', '?')} ({d.get('reason', '')})")
+    new_disp = ctx.get("new_dispatches") or []
+    new_disp_txt = ", ".join(d.get("unit_label") or d.get("unit_type", "") for d in new_disp) or "none"
     forbidden = ctx.get("forbidden_guidance", []) or []
+    protocol = plan.get("protocol_title") or "Emergency intake"
+    missing = ctx.get("missing_slots", []) or []
     body = f"""⟦CHRONOS LIVE CONTEXT⟧ (policy-computed; follow exactly)
+Protocol: {protocol} ({plan.get('display_name') or inc.get('incident_type')})
 Incident: {inc.get('incident_type')} | risk: {inc.get('risk_level')} | confidence: {inc.get('incident_confidence')}
 Location: {inc.get('location_raw')} (needs_confirmation={inc.get('location_needs_confirmation')})
 Caller safety: {inc.get('caller_safety')} | Third-party risk: {inc.get('third_party_risk')}
 Hazards: {', '.join(inc.get('hazards', [])) or 'none'}
-Missing safety slots: {', '.join(ctx.get('missing_slots', [])) or 'none'}
-RECOMMENDED NEXT QUESTION: {ctx.get('recommended_question') or '(confirm details / wrap up safely)'}
-Escalation required: {ctx.get('escalation_required')} ({ctx.get('escalation_reason') or '—'})
+
+SOP checklist (Status | Item | Question):
+{chr(10).join(checklist_rows) or '  | — | (classifying…) | — |'}
+INTAKE COMPLETE: {ctx.get('intake_complete')} | MISSING SLOTS: {', '.join(missing) or 'none'}
+
+RECOMMENDED NEXT QUESTION: {ctx.get('recommended_question') or '(none — wrap up if intake complete)'}
+
+Simulated dispatches (already sent — stay on line):
+{chr(10).join(dispatch_lines) or '  - (none yet)'}
+NEW DISPATCH THIS TURN: {new_disp_txt}
+
+Structured notes (extracted facts):
+{chr(10).join(note_lines) or '  - (none yet)'}
+
+High-risk case (internal): {ctx.get('escalation_required')} — do NOT mention human dispatcher until intake complete.
+HUMAN_HANDOFF_READY: {ctx.get('human_handoff_ready')} | already announced: {ctx.get('human_handoff_announced')}
+FORBIDDEN THIS TURN (never say): {"human dispatcher, bringing in, handoff, transferring you" if not ctx.get('human_handoff_ready') else "(handoff allowed once)"}
+
 Relevant institutional memory:
 {chr(10).join(mem_lines) or '  - (none retrieved)'}
 Do NOT: {' | '.join(forbidden) or 'violate any hard safety constraint'}
 
-Now speak ONE short, calm sentence: ask the recommended question naturally. If escalation is \
-required AND you have not already told the caller a human dispatcher is being brought in, mention it \
-once, briefly — do not repeat it every turn. Never tell the caller to re-enter or that the scene is safe."""
+Speak ONE short, calm sentence. Priority: ask RECOMMENDED NEXT QUESTION if missing slots remain. \
+If NEW DISPATCH this turn, mention it briefly then ask the next question. Human dispatcher ONLY when \
+HUMAN_HANDOFF_READY and not yet announced."""
     return {"role": "system", "content": body}
 
 
@@ -96,7 +127,6 @@ def _chat(messages: list[dict[str, str]], enable_thinking: bool = True, max_toke
 
 def _extract_json(text: str) -> dict[str, Any] | None:
     text = text.strip()
-    # Strip code fences and any leading reasoning before the first '{'.
     start = text.find("{")
     end = text.rfind("}")
     if start == -1 or end == -1 or end < start:
@@ -124,42 +154,156 @@ Extract every fact the caller has stated so far. Return JSON:
   "caller_safety": "unknown|at_risk|evacuated|safe",
   "third_party_at_risk": true_or_false,
   "third_party_desc": "who and where, e.g. 'neighbor in 3B, third floor', or null",
-  "hazards": ["smoke","fire","gas_smell","trapped_person","child","injury","weapon"],
+  "hazards": ["smoke","fire","visible_fire","gas_smell","trapped_person","child","injury","weapon","breathing"],
   "escalation_required": true_or_false,
   "incident_upgraded_to": "possible_active_disturbance|active_threat|null"
 }}
 
 Rules:
-- location_raw: copy the caller's exact words (e.g. "512 Pine Street apartment 3B", "near 5th and Pine", "101 south exit 430 maybe 431").
+- incident_type: NEVER vehicle_crash unless the caller describes an actual car/road crash.
+  "accidentally" is NOT an accident/crash. Complaints about wrong classification are NOT incidents.
+- Breathing difficulty/choking -> medical. Fire/smoke in a building/office -> structure_fire.
+  If BOTH breathing trouble AND fire -> structure_fire (fire takes priority).
+- location_raw: copy the caller's exact words (e.g. "Y Combinator office", "512 Pine Street apartment 3B").
 - location_certain: false if they said near/maybe/around/or/think.
 - caller_safety "evacuated"=caller got out; "safe"=caller says safe; "at_risk"=caller in danger.
 - third_party_at_risk: true if ANYONE else may be in danger, even if caller is safe.
-- hazards: only what was explicitly mentioned.
+- hazards: only what was explicitly mentioned; include breathing for respiratory distress.
 - incident_upgraded_to: use if noise escalated to disturbance or threat; otherwise null.
 - Use null for unknown fields, never guess.\
 """
 
 
 async def extract_state_llm(transcript: str) -> dict[str, Any] | None:
-    """Run a focused LLM extraction against the partial transcript.
-    Returns a structured dict of every call fact extracted so far, or None on failure.
-    Runs thinking=False for speed (~300-600ms on Nemotron)."""
+    """Backward-compatible wrapper — delegates to unified LLM extractor."""
+    from chronos.llm_extractor import extract_call_state
+
+    return await extract_call_state(transcript, partial=False)
+
+
+_SOP_PLAN_SYSTEM = (
+    "You are a 911 training SOP planner. Given an incident type and caller context, "
+    "return ONLY valid JSON defining the structured data points to collect. "
+    "Never include medical diagnosis or tactical instructions."
+)
+
+_SOP_PLAN_PROMPT = """\
+Incident type: {incident_type}
+Hazards detected: {hazards}
+Caller transcript so far:
+{transcript}
+
+Retrieved SOP / prior-call memory (CCEC Cowley County Emergency Communications manual):
+{memory}
+
+Return JSON tailoring the intake checklist to THIS call, aligned with CCEC 911 SOPs:
+{{
+  "display_name": "human-readable incident label",
+  "protocol_title": "short protocol name for dashboard (e.g. CCEC Fire & Smoke Protocol)",
+  "slots": [
+    {{
+      "id": "stable_snake_case_id",
+      "label": "short UI label",
+      "question": "exact next question to ask the caller (one spoken sentence)",
+      "priority": 1,
+      "category": "location|safety|third_party|medical|vehicle|hazard|contact|general",
+      "resolve_hints": ["words/phrases that mean this is answered"],
+      "scope_when": null
+    }}
+  ]
+}}
+
+CCEC SOP requirements (must follow):
+- SOP 303: ALWAYS include exact_location (verify address), callback_number (name + callback), per general call taking.
+- Fire/medical (SOP 501/502): include caller_safety, trapped_person_status if anyone may be inside, injury/hazard slots as needed.
+- Vehicle crash: exact_location, direction_of_travel, caller_safety, injury_status, vehicle_hazard.
+- Medical: exact_location, consciousness, breathing — never diagnosis slots.
+- Disturbance/threat (SOP 404/705): caller_safety, weapons/injury info, suspect location.
+- Use stable ids: exact_location, caller_safety, trapped_person_status, callback_number when applicable.
+- scope_when: "third_party_active" for last_known_location only.
+- 5-8 slots. Questions must match real PSAP call-taking style: brief, one question at a time.
+- resolve_hints: 3-6 substring cues from likely caller answers."""
+
+
+async def generate_sop_plan_llm(
+    incident_type: str,
+    transcript: str,
+    hazards: list[str],
+    memory_snippets: list[str],
+) -> dict[str, Any] | None:
+    """LLM generates a contextual SOP plan for the classified incident."""
     import asyncio
 
     try:
-        prompt = _EXTRACTION_PROMPT.format(transcript=transcript[-2000:])
+        prompt = _SOP_PLAN_PROMPT.format(
+            incident_type=incident_type,
+            hazards=", ".join(hazards) or "none",
+            transcript=transcript[-1500:],
+            memory="\n".join(f"- {m[:180]}" for m in memory_snippets[:4]) or "- (none)",
+        )
+        raw = await asyncio.to_thread(
+            _chat,
+            [
+                {"role": "system", "content": _SOP_PLAN_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            False,
+            700,
+        )
+        return _extract_json(raw)
+    except Exception:
+        return None
+
+
+_SLOT_RESOLVE_PROMPT = """\
+Transcript:
+{transcript}
+
+Checklist slots to evaluate:
+{slots}
+
+For each slot, decide if the caller has ALREADY provided enough information in the transcript —
+even if the dispatcher never asked that question directly.
+Return JSON only:
+{{"resolved_slots": ["slot_id", ...]}}
+
+Rules:
+- Mark resolved if clearly stated anywhere in the transcript; do not require the exact question to have been asked.
+- exact_location: resolved if street address, apartment/hotel/room number, or full landmark given.
+- caller_safety: resolved if caller says safe, safe for now, outside, or at risk/imminent danger.
+- callback_number: resolved if caller gave name AND phone/callback digits.
+- threat_description: resolved if robbery, break-in, banging on door, or threat described.
+- suspect_location: resolved if caller says suspect at door, trying to break in, or inside.
+- weapon_info: resolved if weapon mentioned OR caller confirms no weapon.
+- trapped_person_status: resolved ONLY if clearly no one inside OR everyone accounted for.
+- Do NOT resolve trapped_person_status just because caller evacuated.
+"""
+
+
+async def resolve_slots_llm(transcript: str, slot_ids: list[str]) -> set[str]:
+    """Ask LLM which checklist slots are already answered in the transcript."""
+    import asyncio
+
+    if not slot_ids:
+        return set()
+    try:
+        slots_txt = "\n".join(f"- {s}" for s in slot_ids)
+        prompt = _SLOT_RESOLVE_PROMPT.format(transcript=transcript[-2000:], slots=slots_txt)
         raw = await asyncio.to_thread(
             _chat,
             [
                 {"role": "system", "content": _EXTRACTION_SYSTEM},
                 {"role": "user", "content": prompt},
             ],
-            False,   # enable_thinking=False for speed
-            400,     # max_tokens
+            False,
+            300,
         )
-        return _extract_json(raw)
+        data = _extract_json(raw)
+        if data and isinstance(data.get("resolved_slots"), list):
+            return {str(s) for s in data["resolved_slots"]}
     except Exception:
-        return None
+        pass
+    return set()
 
 
 def author_patch_rationale(failure: dict[str, Any], ops: list[dict[str, Any]]) -> str | None:

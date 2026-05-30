@@ -1,0 +1,122 @@
+[
+  {
+    "id": "ccec_sop_303_general_call_taking",
+    "summary": "CCEC SOP 303 — General Call Taking (Cowley County Emergency Communications). Source: CCEC SOP Manual. POLICY: Handle phone calls promptly, courteously, and in compliance with all procedures. 911 lines always take priority over administrative lines. For every incoming call for service: (1) Verify the address with the caller to ensure the correct location is obtained. (2) Enter the reporting person's name and callback number in CAD. Employees are responsible for accurately entering address information in CAD. PROCEDURES: During high call volume, verify with callers they do not have an emergency before placing on hold. Answer 911 calls: 'Cowley County 911, what is the location of your emergency?' Answer non-emergency: 'Cowley County dispatch, this is [name].' If caller asks for employee name, provide first name only.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:general", "sop_section:303", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "303", "title": "General Call Taking", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_304_hangup_abandoned",
+    "summary": "CCEC SOP 304 — 911 Hang Up and Abandoned Calls. Landline 911: If contact made, question caller to determine if emergency response necessary. If no answer on callback, create CAD call and dispatch officer to check location; research address in CAD for pertinent history. Wireless 911: Same procedure; use map system location if no callback answer. Wireless 911-only phones (no cellular service): cannot be tracked, no callback — do NOT create CAD for hang-ups from these phones. Any time potential emergency may exist, initiate appropriate emergency response. Listen to caller, background noise, and reference address for past calls to determine if response needed.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:general", "sop_section:304", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "304", "title": "911 Hang Up and Abandoned Calls", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_305_transfer_calls",
+    "summary": "CCEC SOP 305 — Transferring Emergency Calls. Before transferring, verify the address is in the jurisdiction being transferred to. Prior to transfer, ask caller to state name and phone number (retained on recorder if call lost). During transfer, stay on line until receiving agency picks up and verbalize handoff: 'This is Cowley County 911, I have a transfer call for you, go ahead sir or ma'am.'",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:general", "sop_section:305", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "305", "title": "Transferring Emergency Calls", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_307_text_to_911",
+    "summary": "CCEC SOP 307 — Text to 911. Provide Text to 911 when voice call not possible (speech/hearing impairment or caller safety at risk from voice call). After answering, gather information same as voice call, create CAD, dispatch units, continue gathering info. If unclear, seek clarification. Do NOT use text lingo, slang, shortcuts, acronyms, or emojis. Do NOT make voice call to text caller's number — may put caller in harm's way. Only callback if supervisor/director approves and no reason to suspect voice call endangers caller.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:general", "sop_section:307", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "307", "title": "Text to 911", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_501_fire_medical_overview",
+    "summary": "CCEC SOP 501 — Fire and Medical Dispatching Overview. CCEC dispatches fire and medical per protocol for: Arkansas City Fire/EMS, Winfield Fire/EMS, Atlanta, Burden, Cambridge, Dexter, Udall Fire. Pre-Alert toning used when fire and EMS units dispatched. Dispatch channel for initial dispatch; units contact dispatch center on dispatch channel. Monitor dispatch channel always; during structure fire or major event, may also monitor designated OPS channel.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:structure_fire", "incident:medical", "sop_section:501", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "501", "title": "Fire and Medical Dispatching Overview", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_502_pre_alert",
+    "summary": "CCEC SOP 502 — Pre-Alerting Fire and Medical Calls. Pre-alert before toning fire/EMS units. Stages: (a) Pre-Alert — primary agency, additional agencies, location, nature of call. (b) Alert — tone all responding agencies. (c) Additional information — repeat Pre-Alert and provide info requested by responders. (d) Follow-Up — after units acknowledge responding, give additional information as received. Pre-alert should be brief; detailed information in follow-up after units acknowledge.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:structure_fire", "incident:medical", "sop_section:502", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "502", "title": "Pre-Alerting Fire and Medical Calls", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_504_hazmat",
+    "summary": "CCEC SOP 504 — Hazardous Materials. Gather all necessary information and dispatch appropriate agencies timely. Once determined Hazmat: notify appropriate fire response agency first. After fire dispatched, contact emergency manager or designee; notify director. Information to gather: What chemicals involved (liquid, solids, gas)? Placards or markers? Container type? Spill size? Noticeable odor? Anyone sick or injured? Material in/near water? Container damaged? Fire present? Clouds, smoke, or vapor visible? Color of cloud/smoke/vapor?",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:structure_fire", "sop_section:504", "source:ccec", "hazard:hazmat"],
+    "metadata": {"source": "ccec_sop_manual", "section": "504", "title": "Hazardous Materials", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_506_mayday_panic",
+    "summary": "CCEC SOP 506 — Mayday Calls and Panic Alarms. Emergency button on fire/EMS radios emits alert tone. Contact responder who pressed button and ask status. If anything other than 'Code 99', dispatch law enforcement to responder location ('Code 99' means 10-4). Until 'Code 99' or law enforcement arrives, consider responder at risk. Mayday call for firefighters needing assistance — announce 'Mayday' on channel and advise emergency traffic only for Mayday-related communications.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:structure_fire", "sop_section:506", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "506", "title": "Mayday Calls and Panic Alarms", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_404_domestic_violence",
+    "summary": "CCEC SOP 404 — Domestic Violence. Maximize safety of victims, responders, and others present. Upon domestic violence report: (a) Initiate and dispatch domestic violence call. (b) Elicit ALL information to help officers assess: witness/victim/suspect identity; help officers quickly identify parties; nature and extent of injuries; nature and extent of threat or physical violence; weapons use or availability; relationship between persons; prior problems; info to locate suspect; protection orders. (c) Relay all known relevant info to responding officers. (d) If contact lost, attempt reestablish — do not reveal call info to third party unless necessary. (e) Relay cancel requests to officers — domestic violence response will NOT be canceled at caller's request. Open-air disturbance with background noise: dispatch officers, research RMS for violence history at address.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:possible_active_disturbance", "incident:active_threat", "sop_section:404", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "404", "title": "Domestic Violence", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_401_law_dispatch",
+    "summary": "CCEC SOP 401 — Law Dispatching Overview. CCEC is exclusive dispatch for Cowley County: Arkansas City PD, Burden PD, Cowley County Sheriff, Udall PD, Winfield PD. Assists KHP, KDWP, KBI as needed. Arkansas City and Winfield PD on respective channels (always monitored). Sheriff, Burden, Udall on Sheriff channel (always monitored).",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:general", "sop_section:401", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "401", "title": "Law Dispatching Overview", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_403_pursuit",
+    "summary": "CCEC SOP 403 — Pursuits (10-32). On pursuit announcement: acknowledge, declare 10-33 traffic only on channel; verify on-duty supervisor aware; check NCIC/local records for vehicle and occupants. Repeat officer's direction and updates; log in CAD. Monitor for pursuit cancellation. If entering another jurisdiction, contact that jurisdiction. If cancelled, relay on all law channels that pursuit terminated.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:vehicle_crash", "sop_section:403", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "403", "title": "Pursuits", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_601_cad_rms",
+    "summary": "CCEC SOP 601 — CAD and RMS. Use Spillman FLEX for CAD and records. Ensure all CAD records accurate and complete. Receive, verify, and correctly enter address information from callers when initiating CAD calls. Investigate address and name alerts and name notices; relay pertinent alert/notice info to responding units. Do not release CAD/RMS info to non-agency partners without director permission.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:general", "sop_section:601", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "601", "title": "CAD and RMS", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_702_train_derailment",
+    "summary": "CCEC SOP 702 — Train Derailment. Gather: location; injuries (severity and number); type of train (HAZMAT, passenger, cargo); size of train (cars and engines); environmental emergencies (fire, chemical release, explosions). Dispatch in order: Fire, Medical, and Law based on location; Cowley County Emergency Management; Railroad Police if company known.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:structure_fire", "sop_section:702", "source:ccec", "hazard:hazmat"],
+    "metadata": {"source": "ccec_sop_manual", "section": "702", "title": "Train Derailment", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_703_aircraft_emergency",
+    "summary": "CCEC SOP 703 — Aircraft Emergencies. Overdue aircraft at Strotherfield: get aircraft description, tail number, known occupants; dispatch Sheriff to verify. Aircraft crash: gather location, known injuries (severity and number), type and size of aircraft; advise fire/medical when dispatched. Contact Kansas Highway Patrol dispatch (primary investigating agency for aircraft in Kansas). Notify director and Cowley County Emergency Management.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:medical", "sop_section:703", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "703", "title": "Aircraft Emergencies", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_705_active_shooter",
+    "summary": "CCEC SOP 705 — Active Shooter Incidents. Dispatch all law enforcement via simulcast on primary channels (Sheriff, Arkansas City, Winfield PD) with location and nature: e.g. 'All officers respond to [address] for active shooter.' After law dispatched, dispatch Arkansas City and Winfield EMS. Notify hospital ER departments and Eagle Med to prepare for patients. Expect 911 call overload. For callers at incident location: gather shooter information for responding law enforcement; advise callers to move to safety; provide EMD instructions to help victims if available.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:active_threat", "incident:possible_active_disturbance", "sop_section:705", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "705", "title": "Active Shooter Incidents", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_707_missing_persons",
+    "summary": "CCEC SOP 707 — Missing Persons. Create CAD call for all missing person reports; dispatch officer from jurisdiction with authority. All missing children considered at-risk until information negates report. If believed abduction just occurred, broadcast over all law channels. For child custody dispute missing child: still create call and dispatch — responding officer determines valid abduction vs custody dispute; do NOT interpret custody orders.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:general", "sop_section:707", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "section": "707", "title": "Missing Persons", "agency": "CCEC"}
+  },
+  {
+    "id": "ccec_sop_fire_call_taking_checklist",
+    "summary": "CCEC Fire/Medical Call-Taking Checklist (derived from SOP 303, 501, 502, 504). Required for fire and medical emergencies: (1) Verify exact location/address with caller — confirm correct location in CAD. (2) Obtain reporting person name and callback number. (3) Determine nature of emergency (structure fire, medical, hazmat, etc.). (4) Ask about injuries — severity and number. (5) Ask about hazards: smoke, fire, gas, chemicals, trapped persons. (6) Ask if caller is safe; if anyone else at risk or unable to evacuate. (7) Pre-alert information: primary agency, location, nature — brief initially, details after units acknowledge. (8) Research address in CAD for alerts, notices, prior incidents. Never tell caller scene is safe or to re-enter dangerous area.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:structure_fire", "incident:medical", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "title": "Fire/Medical Call-Taking Checklist", "agency": "CCEC", "derived_from": ["303", "501", "502", "504"]}
+  },
+  {
+    "id": "ccec_sop_vehicle_crash_checklist",
+    "summary": "CCEC Vehicle Crash / Roadway Emergency Checklist (derived from SOP 303, 403, 601). Required: (1) Verify exact location — road name, nearest exit, landmark, direction of travel. (2) Reporting person name and callback number. (3) Injuries — severity and number. (4) Caller and occupants safely away from traffic if safe to move. (5) Vehicle hazards: smoke, fire, fuel smell, child in vehicle, trapped persons. (6) If location uncertain (two exits, corrections), confirm before committing in CAD. (7) Research address/location in CAD for prior incidents. Do not give mechanical repair advice or tell caller to open hood near smoke.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:vehicle_crash", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "title": "Vehicle Crash Call-Taking Checklist", "agency": "CCEC", "derived_from": ["303", "403", "601"]}
+  },
+  {
+    "id": "ccec_sop_disturbance_escalation",
+    "summary": "CCEC Disturbance / Threat Escalation (derived from SOP 404, 705, non-emergency upgrade). When noise complaint escalates to screaming, glass breaking, fighting, weapons, or threats: upgrade incident immediately. Gather: caller safety; weapons or injuries; suspect description and location; relationship between parties if domestic; prior problems at location. Active shooter/threat: simulcast all law enforcement, then EMS; gather shooter info; advise callers to safety. Domestic violence calls cannot be canceled at caller request — relay cancel requests to officers but maintain response.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:non_emergency_noise", "incident:possible_active_disturbance", "incident:active_threat", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "title": "Disturbance and Threat Escalation", "agency": "CCEC", "derived_from": ["404", "705"]}
+  },
+  {
+    "id": "ccec_sop_medical_call_taking",
+    "summary": "CCEC Medical Emergency Call-Taking (derived from SOP 303, 501, 502). Required: (1) Exact address/location verified. (2) Reporting person name and callback number. (3) Patient status: awake and responsive? Breathing normally? (4) Nature of medical complaint without diagnosing. (5) Number of patients and injury severity. (6) Pre-alert fire/EMS with location and nature; additional details after units acknowledge. (7) Dispatch appropriate fire/EMS agency by jurisdiction. Never provide medical diagnosis or instruct medication. Escalate all medical crises to human dispatcher.",
+    "container_tags": ["agency:demo_psap", "memory_type:sop", "incident:medical", "source:ccec"],
+    "metadata": {"source": "ccec_sop_manual", "title": "Medical Emergency Call-Taking", "agency": "CCEC", "derived_from": ["303", "501", "502"]}
+  }
+]

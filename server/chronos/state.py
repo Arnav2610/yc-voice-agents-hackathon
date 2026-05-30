@@ -22,6 +22,33 @@ class MemoryResult:
 
 
 @dataclass
+class StructuredNote:
+    """A single extracted fact from the caller transcript."""
+
+    category: str  # threat | suspect | victim | location | vehicle | medical | other
+    field: str
+    value: str
+    turn: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class DispatchRecord:
+    """Simulated unit dispatch — training only, never real CAD."""
+
+    unit_type: str  # fire | police | ems
+    location: str | None
+    reason: str
+    dispatch_id: str
+    turn: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class IncidentState:
     """The live hypothesis about the incident, driven by deterministic policy."""
 
@@ -40,6 +67,8 @@ class IncidentState:
     escalation_required: bool = False
     escalation_reason: str | None = None
     upgraded_to: str | None = None
+    correction_detected: bool = False
+    reentry_intent: bool = False
 
     def add_hazard(self, hazard: str) -> bool:
         if hazard not in self.hazards:
@@ -92,6 +121,8 @@ class ChecklistItem:
     priority: int
     resolved: bool = False
     active: bool = True
+    label: str = ""
+    category: str = "general"
 
 
 @dataclass
@@ -105,6 +136,7 @@ class CallState:
     turns: list[str] = field(default_factory=list)  # caller final turns
     partial_buffer: list[str] = field(default_factory=list)
     checklist: list[ChecklistItem] = field(default_factory=list)
+    sop_plan: dict[str, Any] | None = None
     recommended_question: str | None = None
     recommended_slot: str | None = None
     asked_slots: set[str] = field(default_factory=set)
@@ -112,6 +144,8 @@ class CallState:
     asked_slot_counts: dict[str, int] = field(default_factory=dict)
     floor_actions: list[dict[str, Any]] = field(default_factory=list)
     guidance_history: list[dict[str, Any]] = field(default_factory=list)
+    structured_notes: list[StructuredNote] = field(default_factory=list)
+    dispatches: list[DispatchRecord] = field(default_factory=list)
 
     # Interaction / behavior flags (read by the evaluator).
     suppressed_interruption: bool = False
@@ -120,6 +154,7 @@ class CallState:
     ignored_background: bool = False
     instructed_reentry: bool = False  # should always stay False
     forbidden_guidance_emitted: bool = False  # should always stay False
+    human_handoff_announced: bool = False
 
     # Timing
     started_ms: int = 0
@@ -144,9 +179,33 @@ class CallState:
                 "priority": c.priority,
                 "resolved": c.resolved,
                 "active": c.active,
+                "label": c.label or c.slot.replace("_", " ").title(),
+                "category": c.category,
             }
             for c in self.checklist
         ]
+
+    @property
+    def intake_complete(self) -> bool:
+        inc = self.incident
+        if not inc.incident_type:
+            return False
+        active = [c for c in self.checklist if c.active]
+        if not active:
+            return bool(inc.required_slots) and not inc.missing_slots
+        return all(c.resolved for c in active)
+
+    @property
+    def human_handoff_ready(self) -> bool:
+        return self.incident.escalation_required and self.intake_complete
+
+    def _missing_slot_labels_for_snapshot(self) -> list[str]:
+        missing = set(self.incident.missing_slots or [])
+        labels: list[str] = []
+        for c in self.checklist:
+            if c.active and not c.resolved and c.slot in missing:
+                labels.append(c.label or c.slot.replace("_", " ").title())
+        return labels
 
     def snapshot(self) -> dict[str, Any]:
         """A JSON snapshot for the dashboard / latest.json."""
@@ -157,11 +216,17 @@ class CallState:
             "memory": self.memory.to_dict(),
             "turns": self.turns,
             "checklist": self.checklist_dicts(),
+            "sop_plan": self.sop_plan,
             "recommended_question": self.recommended_question,
             "recommended_slot": self.recommended_slot,
             "asked_slots": sorted(self.asked_slots),
             "floor_actions": self.floor_actions,
             "guidance_history": self.guidance_history,
+            "structured_notes": [n.to_dict() for n in self.structured_notes],
+            "dispatches": [d.to_dict() for d in self.dispatches],
+            "intake_complete": self.intake_complete,
+            "human_handoff_ready": self.human_handoff_ready,
+            "missing_slot_labels": self._missing_slot_labels_for_snapshot(),
             "flags": {
                 "suppressed_interruption": self.suppressed_interruption,
                 "backchannel_emitted": self.backchannel_emitted,
@@ -169,6 +234,7 @@ class CallState:
                 "ignored_background": self.ignored_background,
                 "instructed_reentry": self.instructed_reentry,
                 "forbidden_guidance_emitted": self.forbidden_guidance_emitted,
+                "human_handoff_announced": self.human_handoff_announced,
             },
             "first_critical_guidance_ms": self.first_critical_guidance_ms,
         }

@@ -11,8 +11,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 from chronos import config
-from chronos.incident_tracker import IncidentUpdate
-from chronos.safety_sentinel import SafetySignal
 from chronos.state import CallState
 
 FloorKind = Literal["speak", "wait", "interrupt", "backchannel", "handoff", "none"]
@@ -38,8 +36,6 @@ class FloorController:
     def decide(
         self,
         state: CallState,
-        signal: SafetySignal,
-        incident: IncidentUpdate,
         slow_memory: bool = False,
     ) -> FloorAction:
         pol = config.load_policy("interaction_policy")
@@ -47,7 +43,7 @@ class FloorController:
         min_conf = float(interrupt_cfg.get("min_confidence", 0.72))
 
         # 1) Suppress interruption while the caller is correcting critical info.
-        if incident.correction_detected:
+        if state.incident.correction_detected:
             state.suppressed_interruption = True
             return FloorAction(
                 kind="wait",
@@ -70,7 +66,8 @@ class FloorController:
         # 3) Active-danger barge-in. OFF by default: a call-taker shouldn't talk
         #    over a panicking caller, and the live voice path speaks at the turn
         #    boundary regardless. Enable with CHRONOS_ALLOW_BARGE_IN=true.
-        danger = bool(signal.hazards) or signal.third_party_detected or signal.weapon_or_threat
+        inc = state.incident
+        danger = bool(inc.hazards) or inc.third_party_risk == "active" or "weapon" in inc.hazards
         if config._flag("CHRONOS_ALLOW_BARGE_IN", False) and state.incident.escalation_required and danger:
             conf = max(min_conf, round(0.7 + 0.3 * state.incident.incident_confidence, 2))
             if conf >= min_conf:

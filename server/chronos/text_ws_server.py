@@ -118,12 +118,7 @@ async def _agent_reply(kernel: ChronosKernel, messages: list[dict[str, str]], ca
         logger.warning(f"Nemotron reply failed/slow, using deterministic guidance: {type(e).__name__}")
         reply = ""
     if not reply:
-        parts = []
-        if kernel.state.recommended_question:
-            parts.append(kernel.state.recommended_question)
-        if kernel.state.incident.escalation_required:
-            parts.append("I'm bringing in a human dispatcher now.")
-        reply = " ".join(parts) or "Can you tell me your exact location?"
+        reply = kernel.sanitize_spoken_response(kernel._guidance_text())
     return reply
 
 

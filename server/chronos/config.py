@@ -75,7 +75,7 @@ INCIDENT_POLICY_FILES = {
     "vehicle_crash": "vehicle_crash.yaml",
     "non_emergency_noise": "non_emergency_noise.yaml",
     "possible_active_disturbance": "non_emergency_noise.yaml",
-    "active_threat": "non_emergency_noise.yaml",
+    "active_threat": "active_threat.yaml",
     "medical": "medical.yaml",
 }
 

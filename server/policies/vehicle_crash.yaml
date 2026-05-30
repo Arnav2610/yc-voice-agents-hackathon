@@ -49,6 +49,10 @@ required_slots:
   vehicle_hazard:
     question: "Do you see smoke, fire, or smell fuel?"
     priority: 5
+  callback_number:
+    question: "What is your name and a callback number in case we get disconnected?"
+    priority: 6
+    category: contact
 
 location_correction:
   signals:

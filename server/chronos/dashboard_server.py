@@ -77,19 +77,26 @@ def create_app() -> FastAPI:
         # live state written by the bot process (cross-process live view).
         k = LIVE["kernel"]
         if k:
-            return {
+            payload = {
                 "snapshot": k.state.snapshot(),
                 "events": STORE.list_latest(),
                 "disclaimer": config.SIMULATION_DISCLAIMER,
+                "source": "in_process",
             }
-        live = _read_runtime("live.json")
-        if live and live.get("events"):
-            return live
-        return {
-            "snapshot": _read_runtime("latest.json") or {},
-            "events": [],
-            "disclaimer": config.SIMULATION_DISCLAIMER,
-        }
+        else:
+            live = _read_runtime("live.json")
+            snap = (live or {}).get("snapshot") or {}
+            has_live = bool(live) and (live.get("events") or snap.get("call_id"))
+            if has_live:
+                payload = {**live, "source": "live_json"}
+            else:
+                payload = {
+                    "snapshot": _read_runtime("latest.json") or {},
+                    "events": [],
+                    "disclaimer": config.SIMULATION_DISCLAIMER,
+                    "source": "latest_json",
+                }
+        return JSONResponse(payload, headers={"Cache-Control": "no-store, max-age=0"})
 
     @app.get("/chronos/events")
     def events_latest() -> list[dict[str, Any]]:
@@ -272,6 +279,10 @@ def create_app() -> FastAPI:
         """Minimal, glanceable view for a live (mic) demo."""
         return FileResponse(str(config.DASHBOARD_DIR / "live.html"))
 
+    @app.get("/dashboard-shared.js")
+    def dashboard_shared() -> FileResponse:
+        return FileResponse(str(config.DASHBOARD_DIR / "dashboard-shared.js"), media_type="application/javascript")
+
     @app.get("/app.js")
     def appjs() -> FileResponse:
         return FileResponse(str(config.DASHBOARD_DIR / "app.js"), media_type="application/javascript")
@@ -298,6 +309,22 @@ def _port_in_use(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
+def _peer_dashboard_ok(port: int) -> bool:
+    """True if something on `port` looks like a current Chronos dashboard."""
+    import urllib.error
+    import urllib.request
+
+    def _ok(path: str) -> bool:
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method="GET")
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                return 200 <= resp.status < 300
+        except (urllib.error.URLError, TimeoutError, OSError):
+            return False
+
+    return _ok("/chronos/health") and _ok("/dashboard-shared.js")
+
+
 def start_dashboard_in_thread(port: int | None = None) -> threading.Thread | None:
     """Start uvicorn for the dashboard in a daemon thread (shares this process'
     memory with the bot).
@@ -313,12 +340,18 @@ def start_dashboard_in_thread(port: int | None = None) -> threading.Thread | Non
 
     port = port or config.DASHBOARD_PORT
     if _port_in_use(port):
-        logger.warning(
-            f"⚠️  Port {port} is already serving a Chronos dashboard (another process). "
-            f"NOT starting a second one — this bot feeds it live via runtime/live.json. "
-            f"Open http://localhost:{port}/live to watch. (If that view is stale, stop the "
-            f"other dashboard so the bot can host its own.)"
-        )
+        if _peer_dashboard_ok(port):
+            logger.info(
+                f"Chronos dashboard already on http://localhost:{port} — bot will mirror live state "
+                f"to runtime/live.json (open /live to watch)."
+            )
+        else:
+            logger.error(
+                f"Port {port} is in use by a STALE dashboard (missing /dashboard-shared.js or /chronos API). "
+                f"The live view will NOT work until you restart it:\n"
+                f"  pkill -f 'chronos.dashboard_server' ; cd server && make dash\n"
+                f"Or stop that process and restart `make bot` so the bot hosts the dashboard itself."
+            )
         return None
     server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning"))
     t = threading.Thread(target=server.run, daemon=True, name="chronos-dashboard")

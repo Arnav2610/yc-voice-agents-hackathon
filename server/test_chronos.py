@@ -63,6 +63,59 @@ def test_patched_policy_keeps_third_party_active_after_evacuation():
     assert by_id["structure_fire_neighbor_inside_001"].passed
 
 
+def test_accidentally_does_not_classify_as_vehicle_crash():
+    from chronos.llm_mock import mock_extract_call_state
+
+    out = mock_extract_call_state(
+        "i accidentally bent my tongue and now i'm struggling to breathe",
+        partial=True,
+    )
+    assert out["incident_type"] == "medical"
+    assert out["incident_type"] != "vehicle_crash"
+
+
+def test_hackathon_medical_fire_scenario():
+    """Spicy food / breathing distress + office fire; must NOT become vehicle crash."""
+    from chronos.events import EventStore
+    from chronos.kernel import ChronosKernel
+    from chronos.memory_retrieval import ChronosMemoryClient
+
+    turns = [
+        "Hello.",
+        "I'm at the Y combinator office. They served lunch. It was super spicy and I accidentally bent my tongue and now I'm struggling to breathe.",
+        "Yes, I can't breathe. It's hard to take breaths. Oh my god a fire started as well what should I do there's a fire",
+        "um I'm with the other hackathon people and Gary Tan is here as well why does it keep going to vehicle crash",
+    ]
+
+    async def run():
+        store = EventStore()
+        k = ChronosKernel(
+            "hackathon_med_fire",
+            memory_client=ChronosMemoryClient(force_local=True),
+            event_store=store,
+            use_llm_extraction=False,
+        )
+        partial = ""
+        for w in turns[1].split():
+            partial = (partial + " " + w).strip()
+            await k.observe_partial(partial)
+        assert k.state.incident.incident_type == "medical"
+        loc = (k.state.incident.location_raw or "").lower()
+        assert "combinator" in loc
+
+        for turn in turns:
+            await k.process_caller_turn(turn)
+
+        return k, store
+
+    k, store = asyncio.run(run())
+    inc = k.state.incident
+    assert inc.incident_type == "structure_fire", f"expected structure_fire, got {inc.incident_type}"
+    assert inc.incident_type != "vehicle_crash"
+    assert inc.escalation_required is True
+    assert any(e["event_type"] == "sop_checklist_update" for e in store.list(k.state.call_id))
+
+
 def test_partials_update_state_without_a_final_turn():
     """Real-time path: streaming partials must drive detection BEFORE the turn
     finalizes (the 'act while you talk' behavior)."""
@@ -85,6 +138,90 @@ def test_partials_update_state_without_a_final_turn():
     assert inc.third_party_risk == "active"      # activated mid-utterance
     assert inc.escalation_required is True
     assert k.state.turns == []                    # NO final turn committed yet
+
+
+def test_realtime_partial_knife_break_in_before_turn_end():
+    """Streaming partials must classify, note, and dispatch before the caller finishes."""
+    from chronos.events import EventStore
+    from chronos.kernel import ChronosKernel
+    from chronos.memory_retrieval import ChronosMemoryClient
+
+    utterance = (
+        "Hello, I'm at fourteen twelve Market Street and someone's banging on my door "
+        "and trying to break in. They have a knife"
+    )
+
+    async def run():
+        store = EventStore()
+        k = ChronosKernel(
+            "realtime_knife",
+            memory_client=ChronosMemoryClient(force_local=True),
+            event_store=store,
+            use_llm_extraction=False,
+        )
+        partial = ""
+        classified_at: int | None = None
+        weapon_at: int | None = None
+        for i, w in enumerate(utterance.split(), start=1):
+            partial = (partial + " " + w).strip()
+            await k.observe_partial(partial)
+            if classified_at is None and k.state.incident.incident_type == "active_threat":
+                classified_at = i
+            if weapon_at is None and "weapon" in k.state.incident.hazards:
+                weapon_at = i
+        return k, store, classified_at, weapon_at, len(utterance.split())
+
+    k, store, classified_at, weapon_at, total_words = asyncio.run(run())
+    inc = k.state.incident
+    assert k.state.turns == []
+    assert inc.incident_type == "active_threat", f"got {inc.incident_type}"
+    assert classified_at is not None and classified_at < total_words, "must classify before turn end"
+    assert weapon_at is not None and weapon_at <= total_words
+    assert inc.location_raw and "market" in inc.location_raw.lower()
+    assert "weapon" in inc.hazards
+    assert any(d.unit_type == "police" for d in k.state.dispatches)
+    note_fields = {(n.category, n.field) for n in k.state.structured_notes}
+    assert ("threat", "weapon_type") in note_fields or ("threat", "weapon") in note_fields
+    assert any(e["event_type"] == "sop_checklist_update" for e in store.list(k.state.call_id))
+
+
+def test_robbery_classified_active_threat_not_structure_fire():
+    """Home invasion / robbery must not flip to structure fire or ask smoke questions."""
+    from chronos.events import EventStore
+    from chronos.kernel import ChronosKernel
+    from chronos.memory_retrieval import ChronosMemoryClient
+
+    turns = [
+        "1412 Market Street apartment Accelerate Hacker Hotel Room 107 someone banging saying they will rob me",
+        "No just me I'm safe for now but they might break my door soon",
+        "My name is RNF Kumar and my number is 111111222222222222222",
+    ]
+
+    async def run():
+        k = ChronosKernel(
+            "robbery_test",
+            memory_client=ChronosMemoryClient(force_local=True),
+            event_store=EventStore(),
+            use_llm_extraction=False,
+        )
+        for turn in turns:
+            await k.process_caller_turn(turn)
+        return k
+
+    k = asyncio.run(run())
+    inc = k.state.incident
+    assert inc.incident_type == "active_threat", f"got {inc.incident_type}"
+    assert inc.incident_type != "structure_fire"
+    assert "exact_location" in inc.resolved_slots
+    assert "caller_safety" in inc.resolved_slots
+    assert "callback_number" in inc.resolved_slots
+    rec = (k.state.recommended_question or "").lower()
+    assert "smoke" not in rec
+    handoff = k.sanitize_spoken_response(
+        "Are you outside away from smoke? I'm also bringing in a human dispatcher."
+    )
+    assert "human dispatcher" not in handoff.lower()
+    assert "smoke" not in handoff.lower()
 
 
 def test_live_json_mirrors_state_for_cross_process_dashboard():

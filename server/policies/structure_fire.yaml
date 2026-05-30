@@ -53,8 +53,9 @@ required_slots:
     question: "Where were they last seen?"
     priority: 4
   callback_number:
-    question: "What number can responders use if the call drops?"
-    priority: 5
+    question: "What is your name and a callback number in case we get disconnected?"
+    priority: 6
+    category: contact
 
 third_party_risk:
   active_if:

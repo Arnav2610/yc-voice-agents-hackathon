@@ -47,12 +47,31 @@
 
       <div class="panel" id="panel-incident">
         <h2>Incident state</h2>
+        <div id="incident-progress" class="progress-wrap" style="display:none">
+          <div class="progress-label"><span id="incident-progress-label">SOP progress</span></div>
+          <div class="progress-bar"><div id="incident-progress-fill" class="progress-fill" style="width:0%"></div></div>
+        </div>
         <div id="incident" class="incident"></div>
       </div>
 
+      <div class="panel next-card" id="panel-next">
+        <h2>Recommended next question</h2>
+        <div id="next-question" class="next-q-text empty">—</div>
+      </div>
+
       <div class="panel" id="panel-checklist">
-        <h2>SOP checklist <span class="hint">recommended next question highlighted</span></h2>
-        <ul id="checklist" class="checklist"></ul>
+        <h2>SOP checklist <span class="hint" id="checklist-hint">recommended next question highlighted</span></h2>
+        <div id="checklist" class="checklist-grouped"></div>
+      </div>
+
+      <div class="panel" id="panel-dispatches" style="display:none">
+        <h2>Simulated unit dispatch <span class="hint">stay on line</span></h2>
+        <div id="dispatches" class="dispatch-panel"></div>
+      </div>
+
+      <div class="panel" id="panel-notes">
+        <h2>Structured notes <span class="hint">extracted from caller</span></h2>
+        <div id="structured-notes"></div>
       </div>
     </section>
 
@@ -88,6 +107,7 @@
     </section>
   </main>
 
+  <script src="/dashboard-shared.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

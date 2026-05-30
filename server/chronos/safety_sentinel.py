@@ -8,9 +8,14 @@ lets a policy patch change behavior without touching detection code.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
-_VEHICLE_CONTEXT = ("car", "crash", "vehicle", "hood", "front of the car", "highway", "freeway")
+_VEHICLE_CONTEXT = re.compile(
+    r"\b(?:car|vehicle|truck|highway|freeway|interstate|exit\s+\d+|shoulder|"
+    r"front of the car|rear-ended|head-on|wreck|pileup|fender bender)\b",
+    re.I,
+)
 
 _PERSON_TERMS = [
     "neighbor", "baby", "child", "kid", "daughter", "son", "mother", "father",
@@ -72,7 +77,16 @@ class SafetySentinel:
         t = turn_text.lower()
         cum = cumulative_text.lower()
         sig = SafetySignal()
-        vehicle_ctx = any(v in cum for v in _VEHICLE_CONTEXT)
+        vehicle_ctx = bool(_VEHICLE_CONTEXT.search(cum))
+
+        # --- Medical breathing (from latest turn) ---
+        if re.search(
+            r"\b(?:can't breathe|cannot breathe|cant breathe|trouble breathing|struggling to breathe|"
+            r"hard to breathe|not breathing|difficulty breathing|shortness of breath|choking)\b",
+            t,
+        ):
+            sig.hazards.append("breathing")
+            sig.escalation_signals.append("breathing")
 
         # --- Hazards (from the latest turn) ---
         if "smoke" in t or "smoking" in t:

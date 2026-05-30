@@ -43,6 +43,7 @@ required_slots:
   caller_safety:
     question: "Are you safe where you are?"
     priority: 2
+    category: safety
 
 forbidden_guidance:
   - "Do not dismiss the call as non-emergency after violence indicators appear."

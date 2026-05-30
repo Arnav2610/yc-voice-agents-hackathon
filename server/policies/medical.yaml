@@ -38,8 +38,9 @@ required_slots:
     question: "Are they breathing normally?"
     priority: 3
   callback_number:
-    question: "What number can responders use if the call drops?"
-    priority: 4
+    question: "What is your name and a callback number in case we get disconnected?"
+    priority: 5
+    category: contact
 
 forbidden_guidance:
   - "Do not provide a medical diagnosis."

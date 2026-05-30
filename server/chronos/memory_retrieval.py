@@ -81,6 +81,7 @@ def load_seed_records() -> list[_Record]:
         ("seed_prior_calls.json", "prior_call"),
         ("seed_location_memory.json", "location_alias"),
         ("seed_failure_memories.json", "eval_failure"),
+        ("seed_ccec_sops.json", "sop"),
     ]:
         path = config.DATA_DIR / fname
         if not path.exists():

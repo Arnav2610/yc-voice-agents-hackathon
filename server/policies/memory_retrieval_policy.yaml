@@ -9,26 +9,47 @@ triggers:
   incident_hypothesis_changed:
     structure_fire:
       queries:
+        - "CCEC SOP fire medical call taking verify address callback trapped persons smoke hazmat"
         - "SOP checklist structure fire trapped persons evacuation smoke exact location"
         - "previous eval failures structure fire third party trapped person"
     vehicle_crash:
       queries:
+        - "CCEC SOP vehicle crash location direction travel injury smoke callback number"
         - "SOP checklist vehicle crash injury smoke child location direction travel"
         - "previous eval failures vehicle crash location correction smoke child"
     non_emergency_noise:
       queries:
+        - "CCEC SOP disturbance escalation domestic violence weapons injuries"
         - "SOP non-emergency noise complaint escalation to disturbance"
+    medical:
+      queries:
+        - "CCEC SOP medical emergency call taking consciousness breathing location callback"
+        - "medical emergency SOP required checks consciousness breathing location"
+    possible_active_disturbance:
+      queries:
+        - "CCEC SOP domestic violence information gathering weapons injuries"
+        - "CCEC SOP disturbance escalation domestic violence weapons injuries"
+    active_threat:
+      queries:
+        - "CCEC SOP active shooter dispatch gather shooter information caller safety"
+        - "CCEC SOP disturbance escalation domestic violence weapons injuries"
 
   location_mentioned:
     queries:
       - "recent incidents near {location_raw}"
       - "location aliases landmarks for {location_raw}"
+      - "CCEC SOP verify address location CAD callback number"
 
   hazard_detected:
     gas_smell:
       queries:
         - "prior gas smell calls near {location_raw}"
+        - "CCEC SOP hazmat fire gas smell information gathering"
         - "gas smell fire escalation SOP"
+
+  call_start:
+    queries:
+      - "CCEC SOP general call taking verify address callback number 911"
 
   failure_analysis:
     queries:

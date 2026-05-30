@@ -123,7 +123,7 @@ async def run_scenario(
         memory_client=mem,
         event_store=event_store,
         slow_memory_ms=slow,
-        use_llm_extraction=False,  # regression uses deterministic policy engine only
+        use_llm_extraction=False,  # offline regression uses mock LLM extractor (no Nemotron)
     )
     for turn in scenario.get("turns", []):
         if isinstance(turn, dict):

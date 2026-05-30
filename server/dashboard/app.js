@@ -1,8 +1,6 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const esc = (s) =>
-  String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 async function getJSON(url) {
   const r = await fetch(url, { cache: "no-store" });
@@ -10,94 +8,86 @@ async function getJSON(url) {
   return r.json();
 }
 
-function riskClass(r) {
-  return "risk-" + (r || "unknown");
-}
-
 function renderTranscript(snapshot, events) {
   const el = $("transcript");
-  const items = [];
-  // Interleave caller turns, background speech, and agent guidance by event order.
-  for (const ev of events) {
-    if (ev.event_type === "final_transcript") items.push({ kind: "caller", text: ev.data.text });
-    else if (ev.event_type === "background_speech")
-      items.push({ kind: "background", text: ev.data.text });
-    else if (ev.event_type === "agent_guidance") items.push({ kind: "agent", text: ev.data.text });
-  }
-  if (items.length === 0 && snapshot.turns) {
-    for (const t of snapshot.turns) items.push({ kind: "caller", text: t });
-  }
-  el.innerHTML = items.map((i) => `<div class="turn ${i.kind}">${esc(i.text)}</div>`).join("");
+  el.innerHTML = ChronosUI.renderTranscriptHtml(snapshot, events, false);
   el.scrollTop = el.scrollHeight;
 
   const partials = events.filter((e) => e.event_type === "partial_transcript");
   $("partial").textContent = partials.length ? "… " + partials[partials.length - 1].data.text : "";
 }
 
-function renderIncident(inc) {
+function renderIncident(inc, snap) {
+  const panel = $("panel-incident");
   if (!inc || !inc.incident_type) {
     $("incident").innerHTML = '<div class="k">incident</div><div class="v">listening…</div>';
+    $("incident-progress").style.display = "none";
     return;
   }
-  const tp = inc.third_party_risk;
-  const tpClass = tp === "active" ? "tp-active" : tp === "resolved" ? "tp-resolved" : "";
-  const hazards = (inc.hazards || []).map((h) => `<span class="hazard">${esc(h)}</span>`).join("") || "—";
-  let html = "";
-  const row = (k, v) => (html += `<div class="k">${k}</div><div class="v">${v}</div>`);
-  row("type", esc(inc.incident_type) + (inc.upgraded_to ? ` → ${esc(inc.upgraded_to)}` : ""));
-  row("risk", `<span class="badge ${riskClass(inc.risk_level)}">${esc(inc.risk_level)}</span>`);
-  row(
-    "location",
-    esc(inc.location_raw || "unknown") +
-      (inc.location_needs_confirmation && inc.location_raw ? ' <span class="badge risk-medium">confirm</span>' : "")
-  );
-  row("caller safety", esc(inc.caller_safety));
-  row("third-party risk", `<span class="${tpClass}">${esc(tp)}</span>`);
-  row("hazards", hazards);
-  $("incident").innerHTML = html;
-  $("incident").insertAdjacentHTML(
-    "afterend",
-    ""
-  );
-  const exist = document.querySelector("#panel-incident .escalate");
+  inc._planDisplay = (snap.sop_plan && snap.sop_plan.protocol_title) || "";
+  $("incident").innerHTML = ChronosUI.renderIncidentHtml(inc);
+
+  const prog = ChronosUI.checklistProgress(snap.checklist);
+  const progEl = $("incident-progress");
+  if (prog.total > 0) {
+    progEl.style.display = "block";
+    $("incident-progress-fill").style.width = prog.pct + "%";
+    $("incident-progress-label").textContent = `${prog.done}/${prog.total} SOP items · ${prog.pct}%`;
+  } else progEl.style.display = "none";
+
+  const exist = panel.querySelector(".escalate, .handoff-ready, .handoff-pending");
   if (exist) exist.remove();
-  if (inc.escalation_required) {
-    $("panel-incident").insertAdjacentHTML(
+  if (snap.human_handoff_ready) {
+    panel.insertAdjacentHTML(
       "beforeend",
-      `<div class="escalate">⛑ Recommend human dispatcher — ${esc(inc.escalation_reason || "high-risk case")}</div>`
+      `<div class="handoff-ready">⛑ Human dispatcher handoff — intake complete · ${ChronosUI.esc(inc.escalation_reason || "high-risk case")}</div>`
+    );
+  } else if (inc.escalation_required && !snap.intake_complete) {
+    panel.insertAdjacentHTML(
+      "beforeend",
+      `<div class="handoff-pending">📋 Gathering required info before handoff — ${(inc.missing_slots || []).length} item(s) remaining</div>`
     );
   }
 }
 
+function renderDispatches(snapshot) {
+  const el = $("dispatches");
+  if (!el) return;
+  const disp = snapshot.dispatches || [];
+  el.innerHTML = ChronosUI.renderDispatchesHtml(snapshot);
+  el.closest(".panel")?.style && (el.closest(".panel").style.display = disp.length ? "block" : "none");
+}
+
+function renderStructuredNotes(snapshot) {
+  const el = $("structured-notes");
+  if (!el) return;
+  el.innerHTML = ChronosUI.renderStructuredNotesHtml(snapshot);
+}
+
 function renderChecklist(snapshot) {
   const el = $("checklist");
-  const items = snapshot.checklist || [];
-  const rec = snapshot.recommended_slot;
-  el.innerHTML = items
-    .filter((c) => c.active)
-    .map((c) => {
-      const cls = [c.resolved ? "resolved" : "", c.slot === rec ? "rec" : ""].join(" ");
-      const mark = c.resolved ? "✓" : c.slot === rec ? "▶" : "○";
-      return `<li class="${cls}"><span class="mark">${mark}</span><span class="q">${esc(c.question)}<div class="slot">${esc(c.slot)}</div></span></li>`;
-    })
-    .join("");
+  const plan = snapshot.sop_plan;
+  const hint = $("checklist-hint");
+  if (plan && plan.source === "merged") hint.textContent = "AI-tailored to this call";
+  else if (plan && plan.protocol_title) hint.textContent = plan.protocol_title;
+  else hint.textContent = "recommended next question highlighted";
+
+  const html = ChronosUI.renderChecklistTable(snapshot.checklist, snapshot.recommended_slot)
+    || ChronosUI.renderChecklistGrouped(snapshot.checklist, snapshot.recommended_slot);
+  el.innerHTML = html || ChronosUI.renderChecklistFlat(snapshot.checklist, snapshot.recommended_slot);
+  if (!el.innerHTML) el.innerHTML = '<div class="empty">Waiting for incident classification…</div>';
 }
 
 function renderMemory(snapshot) {
-  const el = $("memory");
-  const results = (snapshot.memory && snapshot.memory.results) || [];
-  if (!results.length) {
-    el.innerHTML = '<div class="mem"><div class="content">No memory retrieved yet.</div></div>';
-    return;
-  }
-  el.innerHTML = results
-    .map(
-      (m) =>
-        `<div class="mem"><span class="score">${(m.score ?? 0).toFixed(2)}</span><span class="type">${esc(
-          m.memory_type
-        )}</span><div class="content">${esc(m.content)}</div></div>`
-    )
-    .join("");
+  $("memory").innerHTML = ChronosUI.renderMemoryHtml(snapshot);
+}
+
+function renderNextQuestion(snapshot) {
+  const el = $("next-question");
+  if (!el) return;
+  const q = snapshot.recommended_question;
+  el.textContent = q || "—";
+  el.className = q ? "next-q-text" : "next-q-text empty";
 }
 
 function renderEvents(events) {
@@ -108,7 +98,7 @@ function renderEvents(events) {
       const t = new Date(e.timestamp_ms).toLocaleTimeString();
       let detail = "";
       const d = e.data || {};
-      if (e.event_type === "incident_hypothesis") detail = `${d.incident_type} (${d.confidence})`;
+      if (e.event_type === "incident_hypothesis") detail = `${d.incident_type} (${d.risk_level})`;
       else if (e.event_type === "safety_signal") detail = `tp=${d.third_party_risk} risk=${d.risk_level}`;
       else if (e.event_type === "memory_query") detail = (d.query || "").slice(0, 48);
       else if (e.event_type === "memory_result") detail = `${(d.results || []).length} hit(s)`;
@@ -116,10 +106,11 @@ function renderEvents(events) {
       else if (e.event_type === "escalation_recommended") detail = d.reason || "";
       else if (e.event_type === "final_transcript") detail = (d.text || "").slice(0, 48);
       else if (e.event_type === "sop_checklist_update") detail = `next: ${d.recommended_slot || "—"}`;
+      else if (e.event_type === "sop_plan_ready") detail = `plan: ${(d.sop_plan && d.sop_plan.protocol_title) || "ready"}`;
       else detail = JSON.stringify(d).slice(0, 48);
-      return `<div class="ev ${esc(e.event_type)}"><span class="t">${t}</span><span class="et">${esc(
+      return `<div class="ev ${ChronosUI.esc(e.event_type)}"><span class="t">${t}</span><span class="et">${ChronosUI.esc(
         e.event_type
-      )}</span><span class="d">${esc(detail)}</span></div>`;
+      )}</span><span class="d">${ChronosUI.esc(detail)}</span></div>`;
     })
     .join("");
   el.scrollTop = el.scrollHeight;
@@ -172,7 +163,6 @@ async function renderImprovement() {
   }
   $("metrics").innerHTML = rows;
 
-  // Patch panel
   try {
     const pd = await getJSON("/chronos/policy-diff");
     $("patch-why").textContent = pd.patch?.why_this_fixes_it || "";
@@ -181,7 +171,7 @@ async function renderImprovement() {
 }
 
 function colorizeDiff(diff) {
-  return esc(diff)
+  return ChronosUI.esc(diff)
     .split("\n")
     .map((l) => {
       if (l.startsWith("+")) return `<span class="add">${l}</span>`;
@@ -192,12 +182,11 @@ function colorizeDiff(diff) {
     .join("\n");
 }
 
-// --- demo control bar ---
 async function loadScenarios() {
   try {
     const list = await getJSON("/chronos/scenarios");
     const sel = $("scenario-select");
-    sel.innerHTML = list.map((s) => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join("");
+    sel.innerHTML = list.map((s) => `<option value="${ChronosUI.esc(s.id)}">${ChronosUI.esc(s.title)}</option>`).join("");
   } catch {}
 }
 
@@ -251,9 +240,9 @@ async function renderCekura() {
   let html = `<div class="cekura-head"><span class="cekura-rate">${c.met_expected_outcome}/${c.total}</span><span class="cekura-sub">Expected Outcome · ${rate}% · WebSocket run ${c.result_id}</span></div>`;
   for (const r of c.per_scenario || []) {
     const cls = r.pass ? "pass" : "fail";
-    html += `<div class="cekura-row ${cls}"><span class="mk">${r.pass ? "✓" : "✗"}</span><span class="nm">${esc(
+    html += `<div class="cekura-row ${cls}"><span class="mk">${r.pass ? "✓" : "✗"}</span><span class="nm">${ChronosUI.esc(
       r.scenario
-    )}</span><span class="nt">${esc(r.note || "")}</span></div>`;
+    )}</span><span class="nt">${ChronosUI.esc(r.note || "")}</span></div>`;
   }
   el.innerHTML = html;
 }
@@ -266,8 +255,11 @@ async function tick() {
     $("conn-dot").className = "dot " + (events.length ? "live" : "idle");
     $("conn-text").textContent = health.live_call ? `live: ${health.live_call}` : "idle";
     renderTranscript(snap, events);
-    renderIncident(snap.incident);
+    renderIncident(snap.incident, snap);
     renderChecklist(snap);
+    renderDispatches(snap);
+    renderStructuredNotes(snap);
+    renderNextQuestion(snap);
     renderMemory(snap);
     renderEvents(events);
   } catch (e) {

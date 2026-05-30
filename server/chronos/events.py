@@ -23,6 +23,7 @@ EVENT_TYPES = [
     "memory_query",
     "memory_result",
     "sop_checklist_update",
+    "sop_plan_ready",
     "floor_action",
     "agent_guidance",
     "tool_prefetch",

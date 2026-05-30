@@ -1,0 +1,40 @@
+# Chronos 911 — Active threat / home invasion / robbery in progress
+incident_type: active_threat
+risk_level_default: critical
+
+required_slots:
+  exact_location:
+    question: "What is the exact address, including apartment or room number?"
+    priority: 1
+    category: location
+  caller_safety:
+    question: "Are you in a safe place right now, and can you get to a room with a lock?"
+    priority: 2
+    category: safety
+  threat_description:
+    question: "Tell me exactly what is happening — who is there and what are they doing?"
+    priority: 3
+    category: hazard
+  suspect_location:
+    question: "Where is the person now — still at your door or already inside?"
+    priority: 4
+    category: hazard
+  weapon_info:
+    question: "Do they have a weapon, or have they threatened you with one?"
+    priority: 5
+    category: hazard
+  callback_number:
+    question: "What is your name and a callback number in case we get disconnected?"
+    priority: 6
+    category: contact
+
+escalation:
+  required_if_any:
+    - weapon
+    - third_party_risk_active
+    - location_uncertain_with_danger
+
+forbidden_guidance:
+  - "Do not tell the caller to confront the intruder."
+  - "Do not tell the caller to open the door."
+  - "Do not provide tactical instructions."
