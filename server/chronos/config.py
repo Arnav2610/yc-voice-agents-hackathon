@@ -40,8 +40,7 @@ SIMULATION_DISCLAIMER = (
 
 # Spoken disclaimer the bot says at the start of a simulated call.
 SPOKEN_GREETING = (
-    "Chronos training line. This is a simulated emergency call for training only — "
-    "not a real nine one one service. Go ahead, what's happening?"
+    "This is 911, what's your emergency?"
 )
 
 
