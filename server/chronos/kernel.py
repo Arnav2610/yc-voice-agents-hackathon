@@ -103,6 +103,7 @@ class ChronosKernel:
         self._location_enrich_task: Any = None
         self._last_geocode_query: str | None = None
         self._maps_session: Any = None
+        self._awaiting_slot_answer: str | None = None
         # Tell the SOP engine whether to apply the slot-skip heuristic (live only).
         self.state._use_slot_skip = use_llm_extraction  # type: ignore[attr-defined]
         self._emit("call_start", {"disclaimer": config.SIMULATION_DISCLAIMER})
@@ -164,6 +165,8 @@ class ChronosKernel:
         self.state.partial_buffer.clear()
         self._emit("final_transcript", {"text": text, "turn": self._turn_index})
 
+        self._resolve_pending_slot_answer(text)
+
         inc = self.state.incident
 
         # 1) LLM extraction — sole source of incident state.
@@ -197,6 +200,7 @@ class ChronosKernel:
 
         _asyncio.create_task(self._resolve_slots_async())
         self._sync_resolved_slots(allow_safety=True)
+        self._avoid_repeat_question()
         self.sop.update_checklist(self.state)
         self._emit(
             "sop_checklist_update",
@@ -416,6 +420,9 @@ class ChronosKernel:
         if inc.incident_type and not self.state.sop_plan:
             self.sop.ensure_plan(self.state, inc.incident_type)
         self.sop.update_checklist(self.state)
+        from chronos.slot_display import prune_slot_display_values
+
+        prune_slot_display_values(self.state, self._resolved_slot_ids())
         self._emit("incident_hypothesis", {
             "incident_type": inc.incident_type,
             "risk_level": inc.risk_level,
@@ -521,8 +528,9 @@ class ChronosKernel:
             if s["id"] not in (self.state.incident.resolved_slots or [])
         ]
         import asyncio as _asyncio
-        from chronos.slot_display import derive_slot_display_values, merge_slot_display_values
+        from chronos.slot_display import merge_slot_display_values, prune_slot_display_values
 
+        allowed = self._resolved_slot_ids()
         resolved: set[str] = set()
         if self.use_llm_extraction:
             from chronos.llm_guidance import resolve_slot_display_values_llm, resolve_slots_llm
@@ -537,17 +545,42 @@ class ChronosKernel:
                         merged = set(self.sop._llm_resolved) | resolved
                         self.sop.set_llm_resolved(merged)
                         self.sop.update_checklist(self.state)
+                        allowed = self._resolved_slot_ids()
                 displays = await _asyncio.wait_for(
-                    resolve_slot_display_values_llm(self.state.cumulative_text, all_slots[:12]),
+                    resolve_slot_display_values_llm(
+                        self.state.cumulative_text, all_slots[:12], allowed
+                    ),
                     timeout=3.0,
                 )
-                changed = merge_slot_display_values(self.state, displays)
+                changed = merge_slot_display_values(self.state, displays, allowed_slots=allowed)
+                changed |= prune_slot_display_values(self.state, allowed)
                 if changed or resolved:
                     self._emit_live_state(partial=False)
             except Exception:
                 pass
-        elif merge_slot_display_values(self.state, derive_slot_display_values(self.state)):
+        elif self._sync_slot_displays():
             self._emit_live_state(partial=False)
+
+    def _resolved_slot_ids(self) -> set[str]:
+        return set(self.state.incident.resolved_slots or []) | set(self.sop._llm_resolved)
+
+    def _sync_slot_displays(self, *, incoming: dict[str, str] | None = None) -> bool:
+        """Merge/prune Known/ask values — resolved checklist slots only."""
+        from chronos.slot_display import (
+            derive_slot_display_values,
+            merge_slot_display_values,
+            prune_slot_display_values,
+        )
+
+        allowed = self._resolved_slot_ids()
+        changed = False
+        if incoming:
+            changed |= merge_slot_display_values(self.state, incoming, allowed_slots=allowed)
+        if not self.use_llm_extraction:
+            derived = derive_slot_display_values(self.state, allowed_slots=allowed)
+            changed |= merge_slot_display_values(self.state, derived, allowed_slots=allowed)
+        changed |= prune_slot_display_values(self.state, allowed)
+        return changed
 
     def _sync_resolved_slots(self, allow_safety: bool = True) -> None:
         from chronos.slot_inference import infer_resolved_slots
@@ -556,6 +589,35 @@ class ChronosKernel:
         if inferred:
             merged = set(self.sop._llm_resolved) | inferred
             self.sop.set_llm_resolved(merged)
+
+    def _resolve_pending_slot_answer(self, turn_text: str) -> None:
+        """Mark the slot the agent last asked as resolved when the caller answers."""
+        from chronos.slot_inference import slot_answered_by_turn
+
+        slot = self._awaiting_slot_answer
+        if not slot or not slot_answered_by_turn(slot, turn_text, self.state):
+            self._awaiting_slot_answer = None
+            return
+        merged = set(self.sop._llm_resolved) | {slot}
+        self.sop.set_llm_resolved(merged)
+        self._awaiting_slot_answer = None
+        self.sop.update_checklist(self.state)
+        self._sync_slot_displays()
+
+    def _avoid_repeat_question(self) -> None:
+        """If the next recommended question duplicates the last agent utterance, advance."""
+        hist = self.state.guidance_history
+        if not hist or not self.state.recommended_question:
+            return
+        last = (hist[-1].get("agent") or "").strip().lower()
+        rec = self.state.recommended_question.strip().lower()
+        if not last or not rec:
+            return
+        if last == rec or rec in last or last in rec:
+            slot = self.state.recommended_slot
+            if slot:
+                self.sop.set_llm_resolved(set(self.sop._llm_resolved) | {slot})
+                self.sop.update_checklist(self.state)
 
     def _accept_incident_type(self, new_type: str, *, transcript: str = "", partial: bool = False) -> bool:
         """Prevent threat↔fire flips; allow medical correction when transcript supports it."""
@@ -698,15 +760,9 @@ class ChronosKernel:
 
         extracted_notes = extracted.get("structured_notes") or []
         self._merge_structured_notes(extracted_notes, partial=partial)
-        from chronos.slot_display import derive_slot_display_values, merge_slot_display_values
-
-        slot_vals = extracted.get("slot_values")
-        if isinstance(slot_vals, dict) and slot_vals:
-            if merge_slot_display_values(self.state, slot_vals):
-                changed = True
-        if merge_slot_display_values(self.state, derive_slot_display_values(self.state)):
-            changed = True
         self._sync_resolved_slots(allow_safety=not partial)
+
+        slot_vals = extracted.get("slot_values") if isinstance(extracted.get("slot_values"), dict) else None
 
         if changed or not partial or extracted_notes or extracted.get("resolved_slots"):
             if inc.incident_type:
@@ -714,6 +770,8 @@ class ChronosKernel:
                 if not self.state.sop_plan:
                     self.sop.ensure_plan(self.state, inc.incident_type)
             self.sop.update_checklist(self.state)
+            if self._sync_slot_displays(incoming=slot_vals):
+                changed = True
             self._decide_escalation(extracted)
             self._maybe_policy_dispatch()
             self._refresh_derived_notes()
@@ -1206,6 +1264,8 @@ class ChronosKernel:
         if self.state.human_handoff_ready and ("human dispatcher" in low or "human dispatch" in low):
             self.state.human_handoff_announced = True
         self.state.guidance_history.append({"turn": self._turn_index, "agent": sanitized})
+        if self.state.recommended_slot and "?" in sanitized:
+            self._awaiting_slot_answer = self.state.recommended_slot
         if "go back inside" in sanitized.lower() and "do not go back inside" not in sanitized.lower():
             self.state.instructed_reentry = True
         self._emit("agent_guidance", {"text": sanitized})

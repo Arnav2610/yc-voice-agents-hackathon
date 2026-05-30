@@ -81,7 +81,10 @@
           <h2>Caller location <span class="hint">Google Maps · satellite</span></h2>
           <span class="live-map-badge">Live pin</span>
         </div>
-        <iframe id="live-map-frame" class="live-map-frame" title="Caller location satellite map" loading="lazy" allowfullscreen></iframe>
+        <div class="live-map-wrap">
+          <img id="live-map-frame" class="live-map-frame" alt="Caller location satellite map" loading="lazy" />
+          <span class="live-map-pin-overlay" aria-hidden="true">📍</span>
+        </div>
         <div id="live-map-caption" class="live-map-caption">Awaiting geocoded location…</div>
       </div>
 

@@ -61,7 +61,11 @@ from chronos import config
 from chronos.dashboard_server import set_live_kernel, start_dashboard_in_thread
 from chronos.events import STORE
 from chronos.kernel import ChronosKernel
-from chronos.llm_guidance import CHRONOS_SYSTEM_PROMPT
+from chronos.llm_guidance import (
+    CHRONOS_INCOMPLETE_LONG_PROMPT,
+    CHRONOS_INCOMPLETE_SHORT_PROMPT,
+    CHRONOS_SYSTEM_PROMPT,
+)
 from chronos.memory_retrieval import ChronosMemoryClient
 from chronos.pipecat_processors import ChronosResponseObserver, ChronosUserObserver
 from nemotron_llm import VLLMOpenAILLMService
@@ -213,9 +217,10 @@ async def run_bot(
     vad_stop = float(os.getenv("CHRONOS_VAD_STOP_SECS", "1.05"))
     vad_params = VADParams(stop_secs=vad_stop)
     turn_completion = UserTurnCompletionConfig(
-        incomplete_short_timeout=2.0,
-        incomplete_long_timeout=4.0,
-        instructions=None,
+        incomplete_short_timeout=2.5,
+        incomplete_long_timeout=5.0,
+        incomplete_short_prompt=CHRONOS_INCOMPLETE_SHORT_PROMPT,
+        incomplete_long_prompt=CHRONOS_INCOMPLETE_LONG_PROMPT,
     )
     logger.info(f"Chronos VAD stop_secs={vad_stop} (respond after caller pause)")
     context = LLMContext(tools=tools)

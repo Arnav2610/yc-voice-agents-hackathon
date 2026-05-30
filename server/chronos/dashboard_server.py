@@ -15,9 +15,9 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from chronos import config
 from chronos.events import STORE
@@ -55,9 +55,38 @@ def create_app() -> FastAPI:
 
     @app.get("/chronos/maps-config")
     def maps_config() -> dict[str, Any]:
-        """Public Maps Embed key for the local dashboard (restrict key by HTTP referrer in GCP)."""
+        """Whether server-side Maps is configured (geocode + static map proxy)."""
         key = os.getenv("MAPS_API_KEY", "").strip()
-        return {"enabled": bool(key), "embedKey": key or None}
+        return {"enabled": bool(key)}
+
+    @app.get("/chronos/static-map")
+    async def static_map(
+        lat: float = Query(..., ge=-90, le=90),
+        lng: float = Query(..., ge=-180, le=180),
+    ) -> Response:
+        """Proxy Google Static Maps (satellite + pin) so the browser never needs Embed API."""
+        key = os.getenv("MAPS_API_KEY", "").strip()
+        if not key:
+            return Response(status_code=404, content="MAPS_API_KEY not configured")
+        marker = f"color:red%7C{lat},{lng}"
+        url = (
+            "https://maps.googleapis.com/maps/api/staticmap"
+            f"?center={lat},{lng}&zoom=18&size=640x360&maptype=satellite"
+            f"&markers={marker}&scale=2&key={key}"
+        )
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    body = await resp.read()
+                    ctype = resp.headers.get("Content-Type", "")
+                    if resp.status != 200 or not ctype.startswith("image/"):
+                        msg = body.decode("utf-8", errors="replace")[:500]
+                        return Response(status_code=502, content=msg, media_type="text/plain")
+                    return Response(content=body, media_type=ctype)
+        except Exception as exc:
+            return Response(status_code=502, content=f"static map fetch failed: {exc}")
 
     @app.get("/chronos/health")
     def health() -> dict[str, Any]:

@@ -182,6 +182,17 @@ const ChronosUI = (() => {
     return low.endsWith(" mentioned") || low.endsWith(" reported");
   }
 
+  function intakeKnownValue(item, snap, noteMap) {
+    if (!item.resolved) return null;
+    const displays = snap.slot_display_values || {};
+    if (displays[item.slot] && !isGenericSlotValue(displays[item.slot])) return displays[item.slot];
+    const fromNotes = lookupNoteValue(SLOT_NOTE_KEYS[item.slot] || [], noteMap);
+    if (fromNotes && !isGenericSlotValue(fromNotes)) return fromNotes;
+    const fromState = slotValueFromState(item.slot, snap);
+    if (fromState && !isGenericSlotValue(fromState)) return fromState;
+    return null;
+  }
+
   function slotKnownValue(slot, snap, noteMap) {
     const displays = snap.slot_display_values || {};
     if (displays[slot] && !isGenericSlotValue(displays[slot])) return displays[slot];
@@ -220,9 +231,8 @@ const ChronosUI = (() => {
 
   function consumedNoteKeys(checklist, snap, noteMap) {
     const used = new Set();
-    for (const item of (checklist || []).filter((c) => c.active)) {
-      const val =
-        slotKnownValue(item.slot, snap, noteMap) || lookupNoteValue(SLOT_NOTE_KEYS[item.slot] || [], noteMap);
+    for (const item of (checklist || []).filter((c) => c.active && c.resolved)) {
+      const val = intakeKnownValue(item, snap, noteMap);
       if (val) {
         for (const k of noteKeysForSlot(item.slot)) used.add(k);
       }
@@ -268,8 +278,7 @@ const ChronosUI = (() => {
     const rows = sorted
       .map((c) => {
         const isRec = c.slot === recommendedSlot;
-        const known =
-          slotKnownValue(c.slot, snap, noteMap) || lookupNoteValue(SLOT_NOTE_KEYS[c.slot] || [], noteMap);
+        const known = intakeKnownValue(c, snap, noteMap);
         const status = c.resolved ? "Done" : isRec ? "Next" : "Open";
         const rowCls = ["sop-row", c.resolved ? "done" : "", isRec ? "rec" : ""].filter(Boolean).join(" ");
         const mark = c.resolved ? "✓" : isRec ? "▶" : "○";
@@ -306,8 +315,7 @@ const ChronosUI = (() => {
     let rows = sorted
       .map((c) => {
         const isRec = c.slot === recommendedSlot;
-        const known =
-          slotKnownValue(c.slot, snap, noteMap) || lookupNoteValue(SLOT_NOTE_KEYS[c.slot] || [], noteMap);
+        const known = intakeKnownValue(c, snap, noteMap);
         const status = c.resolved ? "Done" : isRec ? "Next" : "Open";
         const rowCls = ["sop-row", c.resolved ? "done" : "", isRec ? "rec" : ""].filter(Boolean).join(" ");
         const mark = c.resolved ? "✓" : isRec ? "▶" : "○";
@@ -605,6 +613,52 @@ const ChronosUI = (() => {
     return _mapsConfigPromise;
   }
 
+  function latLngToTile(lat, lng, zoom) {
+    const n = 2 ** zoom;
+    const x = Math.floor(((lng + 180) / 360) * n);
+    const latRad = (lat * Math.PI) / 180;
+    const y = Math.floor(
+      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
+    );
+    return { x, y, z: zoom };
+  }
+
+  function esriTileUrl(z, y, x) {
+    return (
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/" +
+      `${z}/${y}/${x}`
+    );
+  }
+
+  function renderEsriTileGrid(wrapEl, lat, lng, zoom = 18) {
+    if (!wrapEl) return;
+    const { x, y, z } = latLngToTile(lat, lng, zoom);
+    let grid = wrapEl.querySelector(".live-map-tile-grid");
+    if (!grid) {
+      grid = document.createElement("div");
+      grid.className = "live-map-tile-grid";
+      grid.setAttribute("aria-hidden", "true");
+      wrapEl.insertBefore(grid, wrapEl.firstChild);
+    }
+    grid.innerHTML = "";
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const tile = document.createElement("img");
+        tile.className = "live-map-tile";
+        tile.alt = "";
+        tile.loading = "lazy";
+        tile.src = esriTileUrl(z, y + dy, x + dx);
+        grid.appendChild(tile);
+      }
+    }
+    grid.hidden = false;
+  }
+
+  function hideEsriTileGrid(wrapEl) {
+    const grid = wrapEl?.querySelector(".live-map-tile-grid");
+    if (grid) grid.hidden = true;
+  }
+
   async function updateLiveMap(panelEl, frameEl, captionEl, snap, isLive) {
     if (!panelEl || !frameEl) return;
     const inc = snap.incident || {};
@@ -619,23 +673,56 @@ const ChronosUI = (() => {
     }
 
     const cfg = await getMapsConfig();
-    if (!cfg.enabled || !cfg.embedKey) {
+    if (!cfg.enabled) {
       panelEl.style.display = "none";
       return;
     }
 
-    const coordKey = `${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
-    const embedUrl =
-      "https://www.google.com/maps/embed/v1/place?key=" +
-      encodeURIComponent(cfg.embedKey) +
-      "&q=" +
-      encodeURIComponent(coordKey) +
-      "&maptype=satellite&zoom=19";
+    const latN = Number(lat);
+    const lngN = Number(lng);
+    const coordKey = `${latN.toFixed(6)},${lngN.toFixed(6)}`;
+    const wrapEl = frameEl.closest(".live-map-wrap") || frameEl.parentElement;
+    const staticUrl =
+      "/chronos/static-map?lat=" +
+      encodeURIComponent(String(latN)) +
+      "&lng=" +
+      encodeURIComponent(String(lngN));
 
     panelEl.style.display = "block";
+    panelEl.classList.remove("live-map-fallback");
     if (frameEl.dataset.coordKey !== coordKey) {
       frameEl.dataset.coordKey = coordKey;
-      frameEl.src = embedUrl;
+      frameEl.dataset.mapSource = "google";
+      frameEl.style.display = "block";
+      hideEsriTileGrid(wrapEl);
+      frameEl.src = staticUrl;
+      frameEl.alt = "Satellite map pin at caller location";
+      frameEl.onload = () => {
+        if (frameEl.dataset.mapSource !== "google") return;
+        frameEl.style.display = "block";
+        hideEsriTileGrid(wrapEl);
+        panelEl.classList.remove("live-map-fallback");
+      };
+      frameEl.onerror = () => {
+        if (frameEl.dataset.mapSource === "fallback") return;
+        frameEl.dataset.mapSource = "fallback";
+        frameEl.style.display = "none";
+        renderEsriTileGrid(wrapEl, latN, lngN, 18);
+        panelEl.classList.add("live-map-fallback");
+        if (captionEl) {
+          const stated =
+            inc.location_raw && inc.location_geocoded && inc.location_raw !== inc.location_geocoded
+              ? `Caller said: ${inc.location_raw} · `
+              : "";
+          const addr = inc.location_geocoded || inc.location_raw || coordKey;
+          const link = inc.location_maps_url
+            ? ` <a href="${esc(inc.location_maps_url)}" target="_blank" rel="noopener">Open in Maps</a>`
+            : "";
+          captionEl.innerHTML =
+            `<span class="live-map-pin">📍</span> ${esc(stated)}<strong>${esc(addr)}</strong>${link}` +
+            `<div class="live-map-hint">Using Esri satellite fallback — enable <strong>Maps Static API</strong> on MAPS_API_KEY for Google imagery.</div>`;
+        }
+      };
     }
 
     if (captionEl) {

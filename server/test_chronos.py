@@ -194,7 +194,7 @@ def test_spicy_tongue_bleeding_is_medical_not_active_threat():
     from chronos.memory_retrieval import ChronosMemoryClient
 
     utterance = (
-        "Hello. Amato Y Combinator Office and we just had lunch and it was very spicy "
+        "Hello. I'm at the Y Combinator Office and we just had lunch and it was very spicy "
         "so my uh tongue uh got bit and I'm bleeding very aggressively now"
     )
 
@@ -263,6 +263,43 @@ def test_mistaken_active_threat_reclassifies_to_medical():
 
     k = asyncio.run(run())
     assert k.state.incident.incident_type == "medical"
+
+
+def test_pending_slot_answer_marks_resolved_and_advances():
+    """Answering the recommended question must resolve that slot and avoid repeats."""
+    from chronos.events import EventStore
+    from chronos.kernel import ChronosKernel
+    from chronos.memory_retrieval import ChronosMemoryClient
+
+    async def run():
+        k = ChronosKernel(
+            "slot_answer",
+            memory_client=ChronosMemoryClient(force_local=True),
+            event_store=EventStore(),
+            use_llm_extraction=False,
+        )
+        await k.process_caller_turn("Please help, I'm bleeding from my mouth at Y Combinator office")
+        k.state.recommended_slot = "injury_status"
+        k.state.recommended_question = "Is the bleeding slowing down or still flowing heavily?"
+        k._awaiting_slot_answer = "injury_status"
+        await k.process_caller_turn("it's becoming worse and worse")
+        return k
+
+    k = asyncio.run(run())
+    assert "injury_status" in k.sop._llm_resolved
+    resolved = set(k.sop._llm_resolved) | set(k.state.incident.resolved_slots or [])
+    for key in k.state.slot_display_values:
+        assert key in resolved, f"display value for unresolved slot {key}"
+
+
+def test_unresolved_slots_pruned_from_display_values():
+    from chronos.slot_display import prune_slot_display_values
+    from chronos.state import CallState
+
+    state = CallState(call_id="prune_test")
+    state.slot_display_values = {"injury_status": "Bleeding from mouth", "breathing": "Normal"}
+    assert prune_slot_display_values(state, {"injury_status"})
+    assert state.slot_display_values == {"injury_status": "Bleeding from mouth"}
 
 
 def test_robbery_classified_active_threat_not_structure_fire():
