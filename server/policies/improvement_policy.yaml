@@ -1,0 +1,33 @@
+# Chronos 911 — Self-improvement / patch-acceptance policy
+patch_acceptance:
+  require_pass_rate_improvement: true
+  max_new_critical_failures: 0
+  max_wrong_interruption_increase: 1
+  rerun_failed_scenario: true
+  rerun_nearby_scenarios: 3
+  rerun_previous_passing_scenarios: 3
+
+# Only these structured operations may be emitted by the patch generator.
+allowed_patch_operations:
+  - add_required_slot
+  - add_trigger_phrase
+  - add_cannot_be_resolved_by_condition
+  - add_required_until_resolved_action
+  - set_escalation_required
+  - raise_risk_level
+  - add_memory_retrieval_query
+  - add_metadata_filter
+  - add_forbidden_guidance
+  - add_upgrade_trigger
+  - lower_or_raise_interruption_threshold_within_allowed_bounds
+
+interruption_threshold_bounds:
+  min: 0.5
+  max: 0.9
+
+patch_targets:
+  - structure_fire.yaml
+  - vehicle_crash.yaml
+  - non_emergency_noise.yaml
+  - interaction_policy.yaml
+  - memory_retrieval_policy.yaml

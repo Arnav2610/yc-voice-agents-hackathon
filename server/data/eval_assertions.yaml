@@ -1,0 +1,83 @@
+# Chronos 911 — evaluation metric groups, failure taxonomy, and patch-target map.
+# Read by chronos/improvement_loop.py and surfaced on the dashboard.
+
+metric_groups:
+  mission_accuracy:
+    - correct_incident_type
+    - required_slots_captured
+    - correct_escalation
+    - unsafe_guidance_count
+  memory_quality:
+    - relevant_memory_retrieved
+    - prior_incident_retrieved
+    - failure_memory_retrieved
+    - irrelevant_memory_count
+  interaction_quality:
+    - wrong_interruptions
+    - missed_interruptions
+    - backchannel_success
+    - caller_correction_handled
+  self_improvement:
+    - failure_classified_correctly
+    - patch_target_correct
+    - failed_scenario_passes_after_patch
+    - critical_regressions
+
+# Headline counters shown in the before/after panel.
+headline_metrics:
+  - key: pass_rate
+    label: Pass rate
+    format: percent
+  - key: missed_trapped_person_question
+    label: Missed trapped-person question
+    format: count
+  - key: wrong_branch_closure
+    label: Wrong safety-branch closure
+    format: count
+  - key: prior_memory_retrieved
+    label: Prior incident memory retrieved
+    format: count
+  - key: avg_time_to_critical_guidance_ms
+    label: Avg time to critical guidance (ms)
+    format: ms
+
+failure_taxonomy:
+  MISSING_CRITICAL_QUESTION:
+    description: The agent skipped a required SOP question.
+    patch_targets: [structure_fire.yaml, vehicle_crash.yaml]
+  WRONG_BRANCH_CLOSURE:
+    description: The agent marked a safety branch resolved too early.
+    patch_targets: [structure_fire.yaml]
+  MEMORY_RETRIEVAL_FAILURE:
+    description: The agent failed to retrieve relevant memory.
+    patch_targets: [memory_retrieval_policy.yaml]
+  MEMORY_OVERUSE:
+    description: The agent retrieved or used irrelevant or stale memory.
+    patch_targets: [memory_retrieval_policy.yaml]
+  WRONG_INTERRUPTION:
+    description: The agent interrupted while the caller was correcting critical info.
+    patch_targets: [interaction_policy.yaml]
+  MISSED_INTERRUPTION:
+    description: The agent failed to interrupt when immediate guidance was needed.
+    patch_targets: [interaction_policy.yaml]
+  SOP_VIOLATION:
+    description: The agent violated an explicit policy or forbidden-guidance rule.
+    patch_targets: [structure_fire.yaml]
+  BAD_ESCALATION:
+    description: The agent failed to escalate a high-risk case or over-escalated a low-risk one.
+    patch_targets: [structure_fire.yaml]
+  LATENCY_FAILURE:
+    description: The agent waited too long before useful guidance or backchannel.
+    patch_targets: [interaction_policy.yaml]
+
+# Default file each failure type patches.
+patch_target_map:
+  MISSING_CRITICAL_QUESTION: policies/structure_fire.yaml
+  WRONG_BRANCH_CLOSURE: policies/structure_fire.yaml
+  MEMORY_RETRIEVAL_FAILURE: policies/memory_retrieval_policy.yaml
+  MEMORY_OVERUSE: policies/memory_retrieval_policy.yaml
+  WRONG_INTERRUPTION: policies/interaction_policy.yaml
+  MISSED_INTERRUPTION: policies/interaction_policy.yaml
+  SOP_VIOLATION: policies/structure_fire.yaml
+  BAD_ESCALATION: policies/structure_fire.yaml
+  LATENCY_FAILURE: policies/interaction_policy.yaml

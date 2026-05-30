@@ -1,5 +1,13 @@
 # YC Voice Agents Hackathon
 
+> 🚑 **This repo's hackathon project is [Chronos 911](./CHRONOS_README.md)** — a *simulated*
+> 911 call-taker copilot that remembers prior incidents/SOPs/eval-failures, retrieves them live
+> during a call, and self-improves its **policies** (not just its prompt) after Cekura evals.
+> See **[CHRONOS_README.md](./CHRONOS_README.md)** and **[DEMO_SCRIPT.md](./DEMO_SCRIPT.md)**.
+> Quick start: `cd server && uv sync && make seed && make bot` (dashboard on :7861).
+
+---
+
 Welcome to the YC Voice Agents Hackathon, hosted by [Cekura](https://cekura.com) and [Daily](https://daily.co), in partnership with [NVIDIA](https://nvidia.com), [AWS](https://aws.amazon.com), and [Twilio](https://twilio.com).
 
 The goal of this event is to learn about building, scaling, evaluating, and continuously improving voice agents.

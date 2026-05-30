@@ -1,0 +1,93 @@
+# Chronos 911 — Structure Fire SOP policy
+#
+# NOTE: This file ships in its BASELINE (pre-patch) state. It intentionally
+# OMITS the `third_party_risk.cannot_be_resolved_by` /
+# `third_party_risk.required_until_resolved` guard so that the self-improvement
+# loop has a real, meaningful failure to fix (WRONG_BRANCH_CLOSURE). The
+# improvement loop adds that guard via safe structured patch operations.
+
+incident_type: structure_fire
+risk_level_default: high
+initial_priority: critical
+
+trigger_phrases:
+  - smoke
+  - fire
+  - burning
+  - gas smell
+  - smell gas
+  - smell of gas
+  - explosion
+  - apartment building
+  - building fire
+  - flames
+
+hazards:
+  smoke:
+    risk: high
+    escalation_required: true
+  visible_fire:
+    risk: critical
+    escalation_required: true
+  gas_smell:
+    risk: critical
+    escalation_required: true
+  explosion:
+    risk: critical
+    escalation_required: true
+  trapped_person:
+    risk: critical
+    escalation_required: true
+
+required_slots:
+  exact_location:
+    question: "What is the exact address or nearest landmark?"
+    priority: 1
+  caller_safety:
+    question: "Are you outside and away from the smoke or danger?"
+    priority: 2
+  trapped_person_status:
+    question: "Is anyone still inside or unable to get out?"
+    priority: 3
+  last_known_location:
+    question: "Where were they last seen?"
+    priority: 4
+  callback_number:
+    question: "What number can responders use if the call drops?"
+    priority: 5
+
+third_party_risk:
+  active_if:
+    - neighbor_inside
+    - child_inside
+    - baby_inside
+    - elderly_person_inside
+    - person_trapped
+    - someone_cannot_exit
+    - caller_unsure_if_anyone_inside
+  # BASELINE BUG: no `cannot_be_resolved_by` guard here. Caller evacuation will
+  # be allowed to resolve the entire safety branch. The improvement loop adds:
+  #   cannot_be_resolved_by: [caller_personally_evacuated, caller_says_i_am_safe]
+  #   required_until_resolved: [ask_if_anyone_inside, ask_last_known_location, escalate_human]
+
+memory_retrieval:
+  required_queries:
+    - "prior gas smell fire smoke calls near {location_raw}"
+    - "structure fire SOP trapped person evacuation smoke exact location"
+    - "previous failures structure fire third party risk branch closure"
+
+forbidden_guidance:
+  - "Do not tell caller to re-enter the building."
+  - "Do not say the scene is safe."
+  - "Do not promise fire response ETA."
+  - "Do not ask caller to investigate the smoke source."
+
+escalation:
+  required_if_any:
+    - smoke
+    - visible_fire
+    - gas_smell
+    - explosion
+    - trapped_person
+    - third_party_risk_active
+    - location_uncertain_with_danger

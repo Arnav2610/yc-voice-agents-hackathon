@@ -1,0 +1,26 @@
+[
+  {
+    "id": "prior_001",
+    "incident_type": "gas_smell",
+    "location_tag": "location:5th_pine",
+    "summary": "Prior call: Caller reported a gas smell near 5th and Pine yesterday at 4:32 PM. No visible fire reported at the time. Caller was advised to leave the area and a human review was requested.",
+    "container_tags": ["agency:demo_psap", "memory_type:prior_call", "location:5th_pine", "incident:gas_smell"],
+    "metadata": {"source": "seed", "risk_level": "medium", "timestamp": "2026-05-29T16:32:00Z"}
+  },
+  {
+    "id": "prior_002",
+    "incident_type": "vehicle_hazard",
+    "location_tag": "location:101_exit_430",
+    "summary": "Prior call: Multiple shoulder incidents reported near US-101 south around exit 430 during evening traffic over the past week. Visibility is poor near the curve.",
+    "container_tags": ["agency:demo_psap", "memory_type:prior_call", "location:101_exit_430", "incident:vehicle_hazard"],
+    "metadata": {"source": "seed", "risk_level": "medium", "timestamp": "2026-05-28T19:10:00Z"}
+  },
+  {
+    "id": "prior_003",
+    "incident_type": "noise_escalation",
+    "location_tag": "location:elm_court",
+    "summary": "Prior call: A noise complaint at Elm Court last month escalated to a physical altercation. Responding unit recommended treating repeat Elm Court noise calls with caution.",
+    "container_tags": ["agency:demo_psap", "memory_type:prior_call", "location:elm_court", "incident:noise_escalation"],
+    "metadata": {"source": "seed", "risk_level": "medium", "timestamp": "2026-04-30T23:05:00Z"}
+  }
+]

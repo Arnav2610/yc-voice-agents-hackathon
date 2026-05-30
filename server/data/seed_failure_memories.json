@@ -1,0 +1,10 @@
+[
+  {
+    "id": "fail_seed_001",
+    "failure_type": "WRONG_BRANCH_CLOSURE",
+    "incident_type": "structure_fire",
+    "summary": "Prior eval failure: In structure-fire scenarios, the agent incorrectly closed third-party trapped-person risk after the caller personally evacuated. Correct rule: caller safety and third-party safety are SEPARATE branches. Keep third_party_risk active until anyone-inside status is explicitly resolved.",
+    "container_tags": ["agency:demo_psap", "memory_type:eval_failure", "incident:structure_fire", "failure_type:WRONG_BRANCH_CLOSURE"],
+    "metadata": {"source": "seed_failure_memory"}
+  }
+]

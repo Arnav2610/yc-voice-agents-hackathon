@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chronos 911 — Simulated Call-Taker Copilot</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="sim-banner">⚠️ SIMULATED TRAINING SYSTEM — not a real 911 service, no responders are dispatched.</div>
+
+  <header>
+    <div class="brand">
+      <span class="logo">▣</span>
+      <div>
+        <h1>Chronos 911</h1>
+        <p class="tag">Simulated call-taker copilot · remembers · retrieves · escalates · self-improves</p>
+      </div>
+    </div>
+    <div class="status">
+      <span id="conn-dot" class="dot"></span>
+      <span id="conn-text">connecting…</span>
+      <a href="/live" target="_blank" class="pill" style="text-decoration:none;color:var(--accent)">↗ Live view</a>
+    </div>
+  </header>
+
+  <div id="controls">
+    <span class="step">Demo flow →</span>
+    <button data-act="seed">① Seed memory</button>
+    <span class="ctl-group">
+      <select id="scenario-select" title="Scenario to play"></select>
+      <button data-act="play">② Play call</button>
+    </span>
+    <button data-act="regression">③ Baseline eval</button>
+    <button data-act="improve" class="primary">④ Self-improve</button>
+    <button data-act="reset" class="ghost">↺ Reset</button>
+    <span id="job-status" class="job"></span>
+  </div>
+
+  <main>
+    <section class="col">
+      <div class="panel" id="panel-transcript">
+        <h2>Live call trace</h2>
+        <div id="transcript" class="transcript"></div>
+        <div id="partial" class="partial"></div>
+      </div>
+
+      <div class="panel" id="panel-incident">
+        <h2>Incident state</h2>
+        <div id="incident" class="incident"></div>
+      </div>
+
+      <div class="panel" id="panel-checklist">
+        <h2>SOP checklist <span class="hint">recommended next question highlighted</span></h2>
+        <ul id="checklist" class="checklist"></ul>
+      </div>
+    </section>
+
+    <section class="col">
+      <div class="panel" id="panel-memory">
+        <h2>Memory retrieval <span class="hint">Supermemory + local fallback</span></h2>
+        <div id="memory" class="memory"></div>
+      </div>
+
+      <div class="panel" id="panel-events">
+        <h2>Event trace</h2>
+        <div id="events" class="events"></div>
+      </div>
+    </section>
+
+    <section class="col">
+      <div class="panel improve" id="panel-improve">
+        <h2>Self-improvement <span class="hint">Cekura → failure memory → policy patch → regression</span></h2>
+        <div id="improve-status" class="improve-status">No improvement run yet.</div>
+        <table id="metrics" class="metrics"></table>
+      </div>
+
+      <div class="panel" id="panel-patch">
+        <h2>Policy patch</h2>
+        <div id="patch-why" class="patch-why"></div>
+        <pre id="patch-diff" class="diff"></pre>
+      </div>
+
+      <div class="panel" id="panel-cekura">
+        <h2>Cekura live eval <span class="hint">WebSocket · Expected Outcome</span></h2>
+        <div id="cekura"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

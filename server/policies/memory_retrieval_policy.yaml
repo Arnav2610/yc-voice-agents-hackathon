@@ -1,0 +1,45 @@
+# Chronos 911 — Memory retrieval policy
+retrieval:
+  max_results_per_query: 5
+  default_threshold: 0.55
+  prefer_recent: true
+  use_container_tags: true
+
+triggers:
+  incident_hypothesis_changed:
+    structure_fire:
+      queries:
+        - "SOP checklist structure fire trapped persons evacuation smoke exact location"
+        - "previous eval failures structure fire third party trapped person"
+    vehicle_crash:
+      queries:
+        - "SOP checklist vehicle crash injury smoke child location direction travel"
+        - "previous eval failures vehicle crash location correction smoke child"
+    non_emergency_noise:
+      queries:
+        - "SOP non-emergency noise complaint escalation to disturbance"
+
+  location_mentioned:
+    queries:
+      - "recent incidents near {location_raw}"
+      - "location aliases landmarks for {location_raw}"
+
+  hazard_detected:
+    gas_smell:
+      queries:
+        - "prior gas smell calls near {location_raw}"
+        - "gas smell fire escalation SOP"
+
+  failure_analysis:
+    queries:
+      - "similar failures {failure_type} {incident_type}"
+      - "accepted patches {failure_type} {incident_type}"
+
+filters:
+  same_agency_required: true
+  include_memory_types:
+    - sop
+    - prior_call
+    - eval_failure
+    - location_alias
+    - patch_rationale

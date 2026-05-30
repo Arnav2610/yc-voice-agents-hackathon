@@ -1,0 +1,54 @@
+# Chronos 911 — Medical (safe-scope) policy. Copilot never diagnoses or
+# instructs medication; it captures scope and escalates to a human dispatcher.
+incident_type: medical
+risk_level_default: high
+
+trigger_phrases:
+  - chest pain
+  - not breathing
+  - unconscious
+  - bleeding
+  - seizure
+  - stroke
+  - overdose
+  - sweating
+  - heart attack
+  - collapsed
+  - choking
+
+hazards:
+  cardiac:
+    risk: critical
+    escalation_required: true
+  breathing:
+    risk: critical
+    escalation_required: true
+  unconscious:
+    risk: critical
+    escalation_required: true
+
+required_slots:
+  exact_location:
+    question: "What is the exact address where help is needed?"
+    priority: 1
+  consciousness:
+    question: "Is the person awake and responsive?"
+    priority: 2
+  breathing:
+    question: "Are they breathing normally?"
+    priority: 3
+  callback_number:
+    question: "What number can responders use if the call drops?"
+    priority: 4
+
+forbidden_guidance:
+  - "Do not provide a medical diagnosis."
+  - "Do not tell the caller to administer medication."
+  - "Do not promise an ambulance ETA."
+
+escalation:
+  required_if_any:
+    - cardiac
+    - breathing
+    - unconscious
+    - any_medical_symptom

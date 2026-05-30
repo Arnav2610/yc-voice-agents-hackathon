@@ -1,0 +1,79 @@
+# Chronos 911 — Vehicle Crash SOP policy
+incident_type: vehicle_crash
+risk_level_default: medium
+
+trigger_phrases:
+  - crash
+  - crashed
+  - accident
+  - collision
+  - highway
+  - freeway
+  - shoulder
+  - exit
+  - car
+  - vehicle
+  - rear-ended
+  - pile up
+
+hazards:
+  smoke_from_vehicle:
+    risk: critical
+    escalation_required: true
+  fire_from_vehicle:
+    risk: critical
+    escalation_required: true
+  child_in_vehicle:
+    risk: high
+    escalation_required: true
+  injury:
+    risk: critical
+    escalation_required: true
+  fuel_smell:
+    risk: critical
+    escalation_required: true
+
+required_slots:
+  exact_location:
+    question: "What road are you on and what is the nearest exit or landmark?"
+    priority: 1
+  direction_of_travel:
+    question: "Which direction are you traveling?"
+    priority: 2
+  caller_safety:
+    question: "Are you and everyone with you safely away from traffic if it is safe to move?"
+    priority: 3
+  injury_status:
+    question: "Is anyone injured?"
+    priority: 4
+  vehicle_hazard:
+    question: "Do you see smoke, fire, or smell fuel?"
+    priority: 5
+
+location_correction:
+  signals:
+    - actually
+    - no wait
+    - "i mean"
+    - not exit
+    - maybe
+    - "or maybe"
+    - sorry
+  actions:
+    suppress_interruptions_ms: 1800
+    require_confirmation_before_commit: true
+    rollback_location_dependent_prefetches: true
+
+forbidden_guidance:
+  - "Do not tell caller to open the hood near smoke."
+  - "Do not give mechanical repair instructions."
+  - "Do not promise tow or emergency ETA."
+
+escalation:
+  required_if_any:
+    - smoke_from_vehicle
+    - fire_from_vehicle
+    - injury
+    - child_in_vehicle
+    - fuel_smell
+    - location_uncertain_with_danger

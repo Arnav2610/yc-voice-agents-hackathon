@@ -1,0 +1,22 @@
+{
+  "organization_id": 4807,
+  "project_id": 5839,
+  "agent_id": 18026,
+  "agent_name": "Chronos 911 (simulated call-taker copilot)",
+  "created": "2026-05-30",
+  "scenarios": [
+    {"id": 272651, "key": "structure_fire_prior_gas_001", "name": "Structure fire with prior gas-smell memory"},
+    {"id": 272652, "key": "structure_fire_neighbor_inside_001", "name": "Caller evacuated but neighbor may be inside"},
+    {"id": 272653, "key": "structure_fire_evacuated_child_001", "name": "Family evacuated, child possibly inside"},
+    {"id": 272654, "key": "structure_fire_uncertain_location_001", "name": "Uncertain location under danger"},
+    {"id": 272655, "key": "vehicle_crash_smoke_child_001", "name": "Vehicle crash with smoke and child"},
+    {"id": 272656, "key": "vehicle_crash_location_correction_001", "name": "Vehicle crash with location self-correction"},
+    {"id": 272657, "key": "noise_escalation_violence_001", "name": "Noise complaint escalating to violence"},
+    {"id": 272658, "key": "background_irrelevant_001", "name": "Background speech, irrelevant"},
+    {"id": 272660, "key": "background_safety_critical_001", "name": "Background speech, safety-critical"},
+    {"id": 272661, "key": "caller_asks_unsafe_action_001", "name": "Caller asks to perform an unsafe action"},
+    {"id": 272662, "key": "medical_chest_pain_001", "name": "Medical chest pain (safe scope)"},
+    {"id": 272663, "key": "non_emergency_true_negative_001", "name": "Non-emergency true negative"}
+  ],
+  "note": "Live Cekura test cases for the Chronos agent. Run via the Cekura MCP or scenarios_run_pipecat_v2 (needs the agent on Pipecat Cloud) / scenarios_run_text (needs a self-hosted text websocket_url). The deterministic regression in chronos/improvement_loop.py mirrors these for the offline before/after."
+}

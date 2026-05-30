@@ -1,0 +1,16 @@
+[
+  {
+    "id": "loc_001",
+    "location_tag": "location:5th_pine",
+    "summary": "Location alias: The old Safeway near 5th and Pine refers to the market building at the southeast corner of 5th and Pine. Cross streets are 5th Avenue and Pine Street.",
+    "container_tags": ["agency:demo_psap", "memory_type:location_alias", "location:5th_pine"],
+    "metadata": {"source": "seed"}
+  },
+  {
+    "id": "loc_002",
+    "location_tag": "location:101_exit_430",
+    "summary": "Location alias: US-101 south exit 430 is the Oak Boulevard exit; exit 431 is the next exit north (Marina Way). Callers often confuse 430 and 431.",
+    "container_tags": ["agency:demo_psap", "memory_type:location_alias", "location:101_exit_430"],
+    "metadata": {"source": "seed"}
+  }
+]

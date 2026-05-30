@@ -1,0 +1,48 @@
+# Chronos 911 — Non-emergency noise complaint policy (can upgrade)
+incident_type: non_emergency_noise
+risk_level_default: low
+
+trigger_phrases:
+  - loud music
+  - noise complaint
+  - party
+  - barking
+  - loud neighbors
+  - blasting music
+
+upgrade_triggers:
+  screaming:
+    new_incident_type: possible_active_disturbance
+    risk: high
+    escalation_required: true
+  glass_breaking:
+    new_incident_type: possible_active_disturbance
+    risk: high
+    escalation_required: true
+  fighting:
+    new_incident_type: possible_active_disturbance
+    risk: high
+    escalation_required: true
+  threat:
+    new_incident_type: active_threat
+    risk: critical
+    escalation_required: true
+  weapon:
+    new_incident_type: active_threat
+    risk: critical
+    escalation_required: true
+  gun:
+    new_incident_type: active_threat
+    risk: critical
+    escalation_required: true
+
+required_slots:
+  location:
+    question: "What is the location of the noise?"
+    priority: 1
+  caller_safety:
+    question: "Are you safe where you are?"
+    priority: 2
+
+forbidden_guidance:
+  - "Do not dismiss the call as non-emergency after violence indicators appear."

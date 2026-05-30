@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chronos 911 — Live</title>
+  <style>
+    :root{
+      --bg:#0b0f17; --panel:#131a26; --panel2:#0f1521; --ink:#e9eef6; --muted:#8da2bd;
+      --line:#243349; --accent:#4ea3ff; --crit:#ff5d6c; --high:#ff9f43; --med:#ffd166; --ok:#36d399;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);
+      font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    #banner{background:#3a1418;color:#ffd7dc;text-align:center;padding:8px;font-weight:700;
+      font-size:13px;letter-spacing:.3px;border-bottom:1px solid #5a2128}
+    header{display:flex;justify-content:space-between;align-items:center;padding:16px 28px;border-bottom:1px solid var(--line)}
+    header h1{margin:0;font-size:22px;letter-spacing:.5px}
+    header h1 .logo{color:var(--accent);margin-right:8px}
+    header .sub{color:var(--muted);font-size:13px;margin-top:2px}
+    .status{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px}
+    .dot{width:12px;height:12px;border-radius:50%;background:var(--muted);box-shadow:0 0 8px currentColor}
+    #reset-btn{background:var(--panel);color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;margin-left:12px}
+    #reset-btn:hover{background:#1b2740;border-color:var(--accent);color:var(--ink)}
+    .dot.live{background:var(--ok)} .dot.idle{background:var(--high)}
+    main{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;padding:22px 28px;max-width:1500px;margin:0 auto}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+    .card h2{margin:0 0 14px;font-size:13px;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent)}
+
+    /* transcript */
+    #transcript{display:flex;flex-direction:column;gap:12px;min-height:60vh;max-height:74vh;overflow-y:auto}
+    .turn{padding:12px 16px;border-radius:12px;font-size:18px;line-height:1.45;max-width:92%}
+    .turn.caller{background:var(--panel2);border:1px solid var(--line);align-self:flex-start}
+    .turn.background{background:#1a1410;border:1px dashed #5a4020;align-self:flex-start}
+    .turn.agent{background:#10233a;border:1px solid #1d4a78;align-self:flex-end}
+    .turn .who{display:block;font-size:11px;font-weight:800;letter-spacing:1px;margin-bottom:4px;text-transform:uppercase}
+    .turn.caller .who{color:var(--accent)} .turn.background .who{color:var(--high)} .turn.agent .who{color:var(--ok)}
+    #partial{margin-top:10px;min-height:26px}
+    .partial-bubble{padding:10px 16px;border-radius:12px;font-size:17px;color:var(--muted);
+      background:var(--panel2);border:1px dashed var(--line);font-style:italic;line-height:1.4;
+      display:inline-block;max-width:92%;}
+
+    /* incident */
+    .row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+    .row:last-child{border-bottom:none}
+    .row .k{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.5px}
+    .row .v{font-weight:700;font-size:17px;text-align:right}
+    .badge{padding:3px 12px;border-radius:999px;font-size:14px;font-weight:800}
+    .risk-critical{background:rgba(255,93,108,.2);color:var(--crit)}
+    .risk-high{background:rgba(255,159,67,.2);color:var(--high)}
+    .risk-medium{background:rgba(255,209,102,.18);color:var(--med)}
+    .risk-low,.risk-unknown{background:rgba(141,162,189,.18);color:var(--muted)}
+    .tp-active{color:var(--crit)} .tp-resolved{color:var(--ok)} .tp-unknown{color:var(--muted)}
+    .hz{display:inline-block;background:rgba(255,93,108,.16);color:#ffb3ba;border:1px solid #5a2128;
+      padding:2px 10px;border-radius:7px;margin:3px 5px 0 0;font-size:13px}
+    #escalate{margin-top:14px;padding:12px 14px;border-radius:10px;background:rgba(255,93,108,.14);
+      border:1px solid #5a2128;color:#ffd7dc;font-weight:700;font-size:15px;display:none}
+    #escalate.show{display:block}
+
+    /* next question */
+    #nextq{font-size:22px;font-weight:700;line-height:1.4;color:#cfe6ff;min-height:30px}
+
+    /* memory */
+    #memory{display:flex;flex-direction:column;gap:10px;max-height:30vh;overflow-y:auto}
+    .mem{padding:10px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line)}
+    .mem .t{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--accent)}
+    .mem.prior_call .t,.mem.eval_failure .t{color:var(--med)}
+    .mem .c{margin-top:3px;font-size:14px;color:var(--ink)}
+    .right-stack{display:flex;flex-direction:column;gap:20px}
+    .empty{color:var(--muted);font-style:italic}
+  </style>
+</head>
+<body>
+  <div id="banner">⚠️ SIMULATED 911 TRAINING SYSTEM — not a real emergency service, no responders are dispatched. For a real emergency, call 911.</div>
+  <header>
+    <div>
+      <h1><span class="logo">▣</span>Chronos 911</h1>
+      <div class="sub">Live simulated call-taker copilot</div>
+    </div>
+    <div class="status"><span id="dot" class="dot"></span><span id="conn">connecting…</span>
+      <button id="reset-btn" onclick="doReset()">↺ Reset</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>Live call</h2>
+      <div id="transcript"></div>
+      <div id="partial"></div>
+    </div>
+
+    <div class="right-stack">
+      <div class="card">
+        <h2>Incident</h2>
+        <div id="incident"></div>
+        <div id="escalate"></div>
+      </div>
+      <div class="card">
+        <h2>Recommended next question</h2>
+        <div id="nextq" class="empty">listening…</div>
+      </div>
+      <div class="card">
+        <h2>Retrieved memory</h2>
+        <div id="memory"><div class="empty">No memory retrieved yet.</div></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const $=id=>document.getElementById(id);
+    const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+    const riskClass=r=>"risk-"+(r||"unknown");
+
+    function renderTranscript(snap,events){
+      const items=[];
+      for(const e of events){
+        if(e.event_type==="final_transcript")items.push({k:"caller",t:e.data.text});
+        else if(e.event_type==="background_speech")items.push({k:"background",t:e.data.text});
+        else if(e.event_type==="agent_guidance")items.push({k:"agent",t:e.data.text});
+      }
+      if(!items.length&&snap.turns)for(const t of snap.turns)items.push({k:"caller",t});
+      const who={caller:"Caller",background:"Background",agent:"Chronos"};
+      $("transcript").innerHTML=items.map(i=>`<div class="turn ${i.k}"><span class="who">${who[i.k]}</span>${esc(i.t)}</div>`).join("");
+      $("transcript").scrollTop=$("transcript").scrollHeight;
+      // Show the latest partial text as a live "typing" bubble while the caller speaks.
+      // It disappears once a final_transcript event lands for this turn.
+      const finals=events.filter(e=>e.event_type==="final_transcript");
+      const partials=events.filter(e=>e.event_type==="partial_transcript");
+      const lastFinalTs=finals.length?finals[finals.length-1].timestamp_ms:0;
+      const lastPartial=partials.length?partials[partials.length-1]:null;
+      const partialIsNewer=lastPartial&&lastPartial.timestamp_ms>lastFinalTs;
+      if(partialIsNewer&&lastPartial.data.text){
+        $("partial").innerHTML=`<div class="partial-bubble">🎙 ${esc(lastPartial.data.text)}</div>`;
+      }else{
+        $("partial").innerHTML="";
+      }
+    }
+
+    function renderIncident(inc){
+      const knownSomething=inc&&(inc.incident_type||inc.location_raw||(inc.hazards&&inc.hazards.length)||inc.escalation_required);
+      if(!knownSomething){$("incident").innerHTML='<div class="empty">Listening for the incident…</div>';$("escalate").className="";return;}
+      const tp=inc.third_party_risk||"unknown";
+      const hz=(inc.hazards||[]).map(h=>`<span class="hz">${esc(h)}</span>`).join("")||"—";
+      let h="";
+      const row=(k,v)=>h+=`<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+      row("Type",(inc.incident_type?esc(inc.incident_type):'<span style="color:var(--muted);font-style:italic">detecting…</span>')+(inc.upgraded_to?` → ${esc(inc.upgraded_to)}`:""));
+      row("Risk",`<span class="badge ${riskClass(inc.risk_level)}">${esc(inc.risk_level)}</span>`);
+      row("Location",esc(inc.location_raw||"unknown")+(inc.location_raw&&inc.location_needs_confirmation?' <span class="badge risk-medium">confirm</span>':""));
+      row("Caller safety",esc(inc.caller_safety));
+      row("3rd-party risk",`<span class="tp-${tp}">${esc(tp)}</span>`);
+      row("Hazards",hz);
+      $("incident").innerHTML=h;
+      const e=$("escalate");
+      if(inc.escalation_required){e.className="show";e.innerHTML="⛑ Recommend human dispatcher — "+esc(inc.escalation_reason||"high-risk case");}
+      else e.className="";
+    }
+
+    function renderMemory(snap){
+      const r=(snap.memory&&snap.memory.results)||[];
+      if(!r.length){$("memory").innerHTML='<div class="empty">No memory retrieved yet.</div>';return;}
+      $("memory").innerHTML=r.slice(0,5).map(m=>`<div class="mem ${esc(m.memory_type)}"><span class="t">${esc(m.memory_type)}</span><div class="c">${esc(m.content)}</div></div>`).join("");
+    }
+
+    async function tick(){
+      try{
+        const d=await (await fetch("/chronos/latest",{cache:"no-store"})).json();
+        const snap=d.snapshot||{},events=d.events||[];
+        $("dot").className="dot "+(events.length?"live":"idle");
+        $("conn").textContent=events.length?"live":"idle — start a call";
+        renderTranscript(snap,events);
+        renderIncident(snap.incident);
+        renderMemory(snap);
+        $("nextq").textContent=snap.recommended_question||"—";
+        $("nextq").className=snap.recommended_question?"":"empty";
+      }catch(e){$("dot").className="dot";$("conn").textContent="dashboard offline";}
+    }
+    async function doReset(){
+      const btn=$("reset-btn");
+      btn.disabled=true; btn.textContent="resetting…";
+      try{ await fetch("/chronos/actions/reset",{method:"POST"}); }catch(e){}
+      btn.disabled=false; btn.textContent="↺ Reset";
+    }
+    setInterval(tick,600);tick();
+  </script>
+</body>
+</html>

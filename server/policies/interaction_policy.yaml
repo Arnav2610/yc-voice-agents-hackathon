@@ -1,0 +1,31 @@
+# Chronos 911 — Interaction (floor control) policy
+# Governs when the copilot speaks, waits, interrupts, or backchannels.
+interrupt:
+  min_confidence: 0.72
+  allowed_if:
+    - active_danger_detected
+    - human_escalation_required
+    - caller_about_to_take_unsafe_action
+    - critical_safety_question_missing_after_danger_disclosed
+  suppress_if:
+    - user_correcting_location
+    - user_spelling_address
+    - user_providing_callback_number
+    - low_confidence_transcript
+  message_templates:
+    structure_fire_smoke: "Ask whether the caller is outside and away from the smoke."
+    vehicle_smoke_child: "Ask whether the caller and child are safely away from traffic and smoke if it is safe to move."
+
+backchannel:
+  after_silence_ms: 1100
+  during_memory_lookup_ms: 1800
+  during_tool_wait_ms: 1800
+  messages:
+    - "I am checking the relevant checklist."
+    - "I am pulling up the prior context."
+    - "I am checking the location guidance."
+
+wait:
+  while_user_correcting_ms: 1800
+  while_user_spelling_ms: 2200
+  while_user_listing_address_ms: 2500
