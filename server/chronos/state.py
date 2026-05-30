@@ -56,6 +56,11 @@ class IncidentState:
     incident_confidence: float = 0.0
     risk_level: str = "unknown"  # unknown | low | medium | high | critical
     location_raw: str | None = None
+    location_geocoded: str | None = None  # Google Maps formatted address for dispatch
+    location_lat: float | None = None
+    location_lng: float | None = None
+    location_place_id: str | None = None
+    location_maps_url: str | None = None
     location_confidence: float = 0.0
     location_needs_confirmation: bool = True
     caller_safety: str = "unknown"  # unknown | self_evacuated | resolved | at_risk

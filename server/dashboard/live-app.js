@@ -165,6 +165,13 @@ async function tick() {
     renderEscalation(snap, isLive);
     renderChecklist(snap, isLive, events);
     renderDispatchesLive(snap, isLive);
+    await ChronosUI.updateLiveMap(
+      $("live-map-panel"),
+      $("live-map-frame"),
+      $("live-map-caption"),
+      snap,
+      isLive
+    );
     renderMemoryLive(snap);
   } catch (e) {
     $("dot").className = "dot";

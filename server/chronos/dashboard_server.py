@@ -53,6 +53,12 @@ def create_app() -> FastAPI:
         CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
     )
 
+    @app.get("/chronos/maps-config")
+    def maps_config() -> dict[str, Any]:
+        """Public Maps Embed key for the local dashboard (restrict key by HTTP referrer in GCP)."""
+        key = os.getenv("MAPS_API_KEY", "").strip()
+        return {"enabled": bool(key), "embedKey": key or None}
+
     @app.get("/chronos/health")
     def health() -> dict[str, Any]:
         k = LIVE["kernel"]

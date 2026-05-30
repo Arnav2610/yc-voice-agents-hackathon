@@ -138,8 +138,12 @@ const ChronosUI = (() => {
   function slotValueFromState(slot, snap) {
     const inc = snap.incident || {};
     if (slot === "exact_location" || slot === "location") {
-      if (!inc.location_raw) return null;
-      return inc.location_raw + (inc.location_needs_confirmation ? " (confirm exact address)" : "");
+      if (!inc.location_raw && !inc.location_geocoded) return null;
+      const base = inc.location_geocoded || inc.location_raw;
+      const stated = inc.location_geocoded && inc.location_raw && inc.location_geocoded !== inc.location_raw
+        ? ` (caller said: ${inc.location_raw})`
+        : inc.location_needs_confirmation ? " (confirm exact address)" : "";
+      return base + stated;
     }
     if (slot === "caller_safety") {
       const labels = {
@@ -503,11 +507,16 @@ const ChronosUI = (() => {
     row("protocol", esc(plan || protocolTitle(inc.incident_type)));
     row("type", esc(incidentLabel(inc.incident_type)) + (inc.upgraded_to ? ` → ${esc(inc.upgraded_to)}` : ""));
     row("risk", `<span class="badge ${riskClass(inc.risk_level)}">${esc(inc.risk_level)}</span>`);
-    row(
-      "location",
-      esc(inc.location_raw || "unknown") +
-        (inc.location_needs_confirmation && inc.location_raw ? ' <span class="badge risk-medium">confirm</span>' : "")
-    );
+    const locDisplay = inc.location_geocoded || inc.location_raw || "unknown";
+    const locExtra =
+      inc.location_geocoded && inc.location_raw && inc.location_geocoded !== inc.location_raw
+        ? ` <span class="badge">via Maps</span> <span class="muted">(caller: ${esc(inc.location_raw)})</span>`
+        : inc.location_needs_confirmation && inc.location_raw
+          ? ' <span class="badge risk-medium">confirm</span>'
+          : inc.location_geocoded
+            ? ' <span class="badge">geocoded</span>'
+            : "";
+    row("location", esc(locDisplay) + locExtra);
     row("caller safety", esc(inc.caller_safety));
     row("third-party risk", `<span class="${tpClass}">${esc(tp)}</span>`);
     row("hazards", hazards);
@@ -521,9 +530,10 @@ const ChronosUI = (() => {
     const plan = inc._planDisplay || protocolTitle(inc.incident_type);
     const tp = inc.third_party_risk || "unknown";
     const tpCls = tp === "active" ? " chip-tp-active" : "";
+    const locDisplay = inc.location_geocoded || inc.location_raw || "unknown";
     const loc =
-      esc(inc.location_raw || "unknown") +
-      (inc.location_needs_confirmation && inc.location_raw ? " · confirm" : "");
+      esc(locDisplay) +
+      (inc.location_geocoded ? " · geocoded" : inc.location_needs_confirmation && inc.location_raw ? " · confirm" : "");
     const chips = [
       `<span class="chip chip-proto"><span class="ck">SOP</span><span class="cv">${esc(plan)}</span></span>`,
       `<span class="chip"><span class="ck">Type</span><span class="cv">${esc(incidentLabel(inc.incident_type))}${inc.upgraded_to ? ` → ${esc(inc.upgraded_to.replace(/_/g, " "))}` : ""}</span></span>`,
@@ -585,6 +595,62 @@ const ChronosUI = (() => {
     });
   }
 
+  let _mapsConfigPromise = null;
+  function getMapsConfig() {
+    if (!_mapsConfigPromise) {
+      _mapsConfigPromise = fetch("/chronos/maps-config", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : { enabled: false }))
+        .catch(() => ({ enabled: false }));
+    }
+    return _mapsConfigPromise;
+  }
+
+  async function updateLiveMap(panelEl, frameEl, captionEl, snap, isLive) {
+    if (!panelEl || !frameEl) return;
+    const inc = snap.incident || {};
+    const lat = inc.location_lat;
+    const lng = inc.location_lng;
+    const hasCoords = lat != null && lng != null && !Number.isNaN(Number(lat)) && !Number.isNaN(Number(lng));
+
+    if (!isLive || !hasCoords) {
+      panelEl.style.display = "none";
+      frameEl.removeAttribute("src");
+      return;
+    }
+
+    const cfg = await getMapsConfig();
+    if (!cfg.enabled || !cfg.embedKey) {
+      panelEl.style.display = "none";
+      return;
+    }
+
+    const coordKey = `${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
+    const embedUrl =
+      "https://www.google.com/maps/embed/v1/place?key=" +
+      encodeURIComponent(cfg.embedKey) +
+      "&q=" +
+      encodeURIComponent(coordKey) +
+      "&maptype=satellite&zoom=19";
+
+    panelEl.style.display = "block";
+    if (frameEl.dataset.coordKey !== coordKey) {
+      frameEl.dataset.coordKey = coordKey;
+      frameEl.src = embedUrl;
+    }
+
+    if (captionEl) {
+      const stated = inc.location_raw && inc.location_geocoded && inc.location_raw !== inc.location_geocoded
+        ? `Caller said: ${inc.location_raw} · `
+        : "";
+      const addr = inc.location_geocoded || inc.location_raw || coordKey;
+      const link = inc.location_maps_url
+        ? ` <a href="${esc(inc.location_maps_url)}" target="_blank" rel="noopener">Open in Maps</a>`
+        : "";
+      captionEl.innerHTML =
+        `<span class="live-map-pin">📍</span> ${esc(stated)}<strong>${esc(addr)}</strong>${link}`;
+    }
+  }
+
   return {
     esc,
     incidentLabel,
@@ -594,6 +660,8 @@ const ChronosUI = (() => {
     transcriptMessageCount,
     bindTranscriptScroll,
     maybeAutoScrollTranscript,
+    getMapsConfig,
+    updateLiveMap,
     renderChecklistGrouped,
     renderChecklistTable,
     renderChecklistFlat,

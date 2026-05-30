@@ -147,6 +147,16 @@ async def run_bot(
         ),
     )
 
+    async def resolve_location_geocode(params: FunctionCallParams) -> None:
+        """Geocode a landmark or address via Google Maps before dispatch."""
+        args = params.arguments or {}
+        query = str(args.get("query") or kernel.state.incident.location_raw or "").strip()
+        if not query:
+            await params.result_callback({"ok": False, "error": "query or caller location required"})
+            return
+        result = await kernel.enrich_location(query)
+        await params.result_callback({"ok": True, **result})
+
     async def dispatch_simulated_unit(params: FunctionCallParams) -> None:
         """Dispatch a simulated fire/police/EMS unit (training only — never real responders)."""
         args = params.arguments or {}
@@ -155,14 +165,49 @@ async def run_bot(
         if unit_type not in ("fire", "police", "ems"):
             await params.result_callback({"ok": False, "error": "unit_type must be fire, police, or ems"})
             return
+        await kernel.ensure_location_enriched()
+        kernel.log_simulated_cad()
         sent = kernel.dispatch_simulated_units([unit_type], reason)
         await params.result_callback(
-            {"ok": True, "dispatched": sent, "note": "Simulated dispatch only — no real responders sent."}
+            {
+                "ok": True,
+                "dispatched": sent,
+                "dispatch_address": kernel.dispatch_location(),
+                "note": "Simulated dispatch only — no real responders sent.",
+            }
         )
 
-    dispatch_tool = dispatch_simulated_unit
-    tools = ToolsSchema(standard_tools=[dispatch_tool])
-    llm.register_direct_function(dispatch_tool)
+    async def find_nearest_facility_tool(params: FunctionCallParams) -> None:
+        """Find nearest hospital, fire station, or police station near the geocoded location."""
+        args = params.arguments or {}
+        facility = str(args.get("facility") or "ems").strip().lower()
+        if facility not in ("ems", "fire", "police"):
+            await params.result_callback({"ok": False, "error": "facility must be ems, fire, or police"})
+            return
+        result = await kernel.find_nearest_facility(facility)
+        await params.result_callback({"ok": True, **result})
+
+    async def lookup_location_history_tool(params: FunctionCallParams) -> None:
+        """Look up prior incidents and institutional memory near this location."""
+        result = kernel.lookup_location_history()
+        await params.result_callback({"ok": True, **result})
+
+    async def log_simulated_cad_tool(params: FunctionCallParams) -> None:
+        """Create a simulated CAD event with the enriched dispatch address."""
+        await kernel.ensure_location_enriched()
+        result = kernel.log_simulated_cad()
+        await params.result_callback({"ok": True, **result})
+
+    tool_fns = [
+        resolve_location_geocode,
+        dispatch_simulated_unit,
+        find_nearest_facility_tool,
+        lookup_location_history_tool,
+        log_simulated_cad_tool,
+    ]
+    tools = ToolsSchema(standard_tools=tool_fns)
+    for fn in tool_fns:
+        llm.register_direct_function(fn)
 
     # Wait for >1s of silence before treating the caller as done speaking (default VAD is 0.2s).
     vad_stop = float(os.getenv("CHRONOS_VAD_STOP_SECS", "1.05"))

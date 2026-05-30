@@ -21,6 +21,8 @@ from chronos.events import EventStore
 from chronos.floor_controller import FloorController
 from chronos.incident_signals import medical_without_threat, normalize_incident_type
 from chronos.memory_retrieval import ChronosMemoryClient
+from chronos.copilot_tools import log_simulated_cad, lookup_location_history
+from chronos.location_tools import find_nearest_facility, geocode_location, maps_configured, maps_navigation_url
 from chronos.mocks import dispatch_unit, escalate_to_human, resolve_location
 from chronos.sop_engine import SOPEngine
 from chronos.state import CallState, DispatchRecord, StructuredNote
@@ -98,6 +100,9 @@ class ChronosKernel:
         self._sop_plan_for_type: str | None = None
         self._slot_resolve_task: Any = None
         self._new_dispatches_this_turn: list[dict[str, Any]] = []
+        self._location_enrich_task: Any = None
+        self._last_geocode_query: str | None = None
+        self._maps_session: Any = None
         # Tell the SOP engine whether to apply the slot-skip heuristic (live only).
         self.state._use_slot_skip = use_llm_extraction  # type: ignore[attr-defined]
         self._emit("call_start", {"disclaimer": config.SIMULATION_DISCLAIMER})
@@ -204,8 +209,9 @@ class ChronosKernel:
             },
         )
 
-        # 4) Speculative location resolution (reversible read) + memory retrieval.
+        # 4) Location enrichment (Google Maps when configured) + memory retrieval.
         if inc.location_raw:
+            self._schedule_location_enrichment(inc.location_raw)
             loc = resolve_location(inc.location_raw)
             self._emit("tool_prefetch", {"tool": "resolve_location", "result": loc})
 
@@ -435,8 +441,7 @@ class ChronosKernel:
             import asyncio as _asyncio
             _asyncio.create_task(self._retrieve_memory())
         if inc.location_raw:
-            loc = resolve_location(inc.location_raw)
-            self._emit("tool_prefetch", {"tool": "resolve_location", "result": loc, "partial": partial})
+            self._schedule_location_enrichment(inc.location_raw)
 
     async def _run_extraction(self, transcript: str, seq: int, partial: bool = True) -> None:
         """Background LLM extraction — updates state when it lands."""
@@ -613,7 +618,11 @@ class ChronosKernel:
             certain = bool(extracted.get("location_certain"))
             if loc != inc.location_raw:
                 inc.location_raw = loc
+                inc.location_geocoded = None
+                inc.location_lat = None
+                inc.location_lng = None
                 changed = True
+                self._schedule_location_enrichment(loc)
             inc.location_needs_confirmation = not certain
             inc.location_confidence = 0.9 if certain else 0.6
 
@@ -833,6 +842,126 @@ class ChronosKernel:
             self._emit("structured_notes_update", {"notes": [n.to_dict() for n in self.state.structured_notes], "added": added})
         self._refresh_derived_notes()
 
+    def dispatch_location(self) -> str | None:
+        """Best address for simulated unit dispatch (Maps-enriched when available)."""
+        inc = self.state.incident
+        return inc.location_geocoded or inc.location_raw
+
+    def _schedule_location_enrichment(self, query: str | None) -> None:
+        q = (query or "").strip()
+        if not q or q == self._last_geocode_query:
+            return
+        if self._mock_extractor or not maps_configured():
+            loc = resolve_location(q)
+            self._emit("tool_prefetch", {"tool": "resolve_location", "result": loc})
+            return
+        import asyncio as _asyncio
+
+        if self._location_enrich_task and not self._location_enrich_task.done():
+            return
+        self._location_enrich_task = _asyncio.create_task(self.enrich_location(q))
+
+    async def enrich_location(self, query: str | None = None) -> dict[str, Any]:
+        """Geocode caller location via Google Maps (or mock fallback)."""
+        q = (query or self.state.incident.location_raw or "").strip()
+        if not q:
+            return {}
+        self._last_geocode_query = q
+        import aiohttp
+
+        if self._maps_session is None or self._maps_session.closed:
+            self._maps_session = aiohttp.ClientSession()
+        result = await geocode_location(q, session=self._maps_session)
+        self._apply_geocode_result(result)
+        self._emit("tool_commit", {"tool": "geocode_location", "result": result})
+        self._write_live(force=True)
+        return result
+
+    async def ensure_location_enriched(self) -> dict[str, Any]:
+        """Await in-flight geocode or run one before dispatch."""
+        import asyncio as _asyncio
+
+        if self._location_enrich_task and not self._location_enrich_task.done():
+            try:
+                return await _asyncio.wait_for(self._location_enrich_task, timeout=3.0)
+            except TimeoutError:
+                pass
+        q = (self.state.incident.location_raw or "").strip()
+        if q and not self.state.incident.location_geocoded:
+            return await self.enrich_location(q)
+        return {}
+
+    def _apply_geocode_result(self, result: dict[str, Any]) -> None:
+        if not result:
+            return
+        inc = self.state.incident
+        formatted = result.get("formatted_address")
+        if formatted:
+            inc.location_geocoded = formatted
+            inc.location_confidence = max(inc.location_confidence, float(result.get("confidence") or 0))
+            if not result.get("needs_confirmation"):
+                inc.location_needs_confirmation = False
+            inc.location_lat = result.get("lat")
+            inc.location_lng = result.get("lng")
+            inc.location_place_id = result.get("place_id")
+            inc.location_maps_url = maps_navigation_url(inc.location_lat, inc.location_lng, formatted)
+            self._merge_structured_notes(
+                [
+                    {
+                        "category": "location",
+                        "field": "geocoded_address",
+                        "value": formatted,
+                    }
+                ],
+                partial=False,
+            )
+            if result.get("source") == "google_maps" and result.get("query") != formatted:
+                self._merge_structured_notes(
+                    [
+                        {
+                            "category": "location",
+                            "field": "caller_stated",
+                            "value": str(result.get("query")),
+                        }
+                    ],
+                    partial=False,
+                )
+            self._sync_resolved_slots(allow_safety=False)
+            self.sop.update_checklist(self.state)
+
+    async def find_nearest_facility(self, facility: str = "ems") -> dict[str, Any]:
+        """Places API lookup for nearest hospital / fire / police."""
+        await self.ensure_location_enriched()
+        inc = self.state.incident
+        if inc.location_lat is None or inc.location_lng is None:
+            return {"error": "Location not geocoded yet", "facility": facility}
+        import aiohttp
+
+        if self._maps_session is None or self._maps_session.closed:
+            self._maps_session = aiohttp.ClientSession()
+        result = await find_nearest_facility(
+            inc.location_lat, inc.location_lng, facility, session=self._maps_session
+        )
+        self._emit("tool_commit", {"tool": "find_nearest_facility", "result": result})
+        return result
+
+    def lookup_location_history(self) -> dict[str, Any]:
+        """Prior incidents + memory near this location (training mock)."""
+        loc = self.dispatch_location()
+        mem = [r.to_dict() for r in self.state.memory.results[:8]]
+        result = lookup_location_history(loc, mem)
+        self._emit("tool_commit", {"tool": "lookup_location_history", "result": result})
+        return result
+
+    def log_simulated_cad(self) -> dict[str, Any]:
+        """Create simulated CAD record with enriched dispatch address."""
+        result = log_simulated_cad(
+            self.state.incident.to_dict(),
+            dispatch_address=self.dispatch_location(),
+        )
+        self._emit("tool_commit", {"tool": "log_simulated_cad", "result": result})
+        return result
+
     def dispatch_simulated_units(
         self, unit_types: list[str] | None = None, reason: str | None = None
     ) -> list[dict[str, Any]]:
@@ -855,7 +984,7 @@ class ChronosKernel:
         dispatched = {d.unit_type for d in self.state.dispatches}
         hazards = set(inc.hazards or [])
         itype = inc.incident_type
-        loc = inc.location_raw
+        loc = self.dispatch_location()
 
         candidates: list[tuple[str, str]] = []
         if unit_types:
@@ -885,6 +1014,9 @@ class ChronosKernel:
             if unit_type in dispatched:
                 continue
             result = dispatch_unit(unit_type, loc, unit_reason, inc.to_dict())
+            if "dispatch_address" not in result:
+                result["dispatch_address"] = loc
+                result["caller_stated_location"] = inc.location_raw
             rec = DispatchRecord(
                 unit_type=unit_type,
                 location=loc,
@@ -1079,6 +1211,8 @@ class ChronosKernel:
         self._emit("agent_guidance", {"text": sanitized})
 
     async def on_call_complete(self) -> None:
+        if self._maps_session and not self._maps_session.closed:
+            await self._maps_session.close()
         snap = self.state.snapshot()
         self._emit("call_complete", {"snapshot_incident": snap["incident"], "flags": snap["flags"]})
         try:

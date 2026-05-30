@@ -272,6 +272,13 @@ async function tick() {
     renderIncident(snap.incident, snap);
     renderChecklist(snap, events);
     renderDispatches(snap);
+    await ChronosUI.updateLiveMap(
+      $("live-map-panel"),
+      $("live-map-frame"),
+      $("live-map-caption"),
+      snap,
+      !!(latest.events || []).length || !!health.live_call
+    );
     renderNextQuestion(snap);
     renderMemory(snap);
     renderEvents(events);
