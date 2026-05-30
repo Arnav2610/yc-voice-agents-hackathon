@@ -81,7 +81,7 @@ Chronos treats a 911 call as a **continuous stream** Partial speech updates the 
 Caller ──▶ Nemotron ASR (streaming) ──▶ Chronos kernel ──▶ Live dashboard
               │ partial + final                    │  SOP engine · memory · policy
               ▼                              ▼
-         LLM extraction              Nemotron voice LLM ◀── Supermemory Context (Cekura used to fine)
+         LLM extraction              Nemotron voice LLM ◀── Supermemory Context (Cekura used to fine tune)
          (mid-utterance)                    │
                                             ▼
                                        Gradium TTS ──▶ Caller
