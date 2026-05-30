@@ -38,44 +38,38 @@
   </div>
 
   <main>
-    <section class="col">
-      <div class="panel" id="panel-transcript">
-        <h2>Live call trace</h2>
-        <div id="transcript" class="transcript"></div>
-        <div id="partial" class="partial"></div>
-      </div>
-
-      <div class="panel" id="panel-incident">
-        <h2>Incident state</h2>
-        <div id="incident-progress" class="progress-wrap" style="display:none">
-          <div class="progress-label"><span id="incident-progress-label">SOP progress</span></div>
-          <div class="progress-bar"><div id="incident-progress-fill" class="progress-fill" style="width:0%"></div></div>
+    <section class="col col-operator">
+      <div class="operator-split">
+        <div class="panel panel-transcript" id="panel-transcript">
+          <h2>Live call trace</h2>
+          <div id="transcript" class="transcript"></div>
+          <div id="partial" class="partial"></div>
         </div>
-        <div id="incident" class="incident"></div>
-      </div>
 
-      <div class="panel next-card" id="panel-next">
-        <h2>Recommended next question</h2>
-        <div id="next-question" class="next-q-text empty">—</div>
+        <div class="panel panel-sop" id="panel-sop">
+          <div class="sop-head">
+            <div class="sop-head-row">
+              <h2>SOP intake</h2>
+              <span class="hint" id="checklist-hint">checklist + captured facts</span>
+            </div>
+            <div id="incident" class="incident incident-compact"></div>
+            <div id="incident-progress" class="progress-wrap progress-compact" style="display:none">
+              <div class="progress-label"><span id="incident-progress-label">SOP progress</span></div>
+              <div class="progress-bar"><div id="incident-progress-fill" class="progress-fill" style="width:0%"></div></div>
+            </div>
+            <div id="next-question" class="next-q-inline empty">—</div>
+          </div>
+          <div id="checklist" class="checklist-fit"></div>
+        </div>
       </div>
+    </section>
 
-      <div class="panel" id="panel-checklist">
-        <h2>SOP checklist <span class="hint" id="checklist-hint">recommended next question highlighted</span></h2>
-        <div id="checklist" class="checklist-grouped"></div>
-      </div>
-
+    <section class="col">
       <div class="panel" id="panel-dispatches" style="display:none">
         <h2>Simulated unit dispatch <span class="hint">stay on line</span></h2>
         <div id="dispatches" class="dispatch-panel"></div>
       </div>
 
-      <div class="panel" id="panel-notes">
-        <h2>Structured notes <span class="hint">extracted from caller</span></h2>
-        <div id="structured-notes"></div>
-      </div>
-    </section>
-
-    <section class="col">
       <div class="panel" id="panel-memory">
         <h2>Memory retrieval <span class="hint">Supermemory + local fallback</span></h2>
         <div id="memory" class="memory"></div>

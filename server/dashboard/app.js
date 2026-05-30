@@ -10,22 +10,34 @@ async function getJSON(url) {
 
 function renderTranscript(snapshot, events) {
   const el = $("transcript");
-  el.innerHTML = ChronosUI.renderTranscriptHtml(snapshot, events, false);
-  el.scrollTop = el.scrollHeight;
+  el.innerHTML = ChronosUI.renderTranscriptHtml(snapshot, events, true);
 
   const partials = events.filter((e) => e.event_type === "partial_transcript");
-  $("partial").textContent = partials.length ? "… " + partials[partials.length - 1].data.text : "";
+  const partialEl = $("partial");
+  if (partials.length) {
+    const text = partials[partials.length - 1].data.text;
+    partialEl.innerHTML = text ? `<div class="partial-bubble">🎙 ${ChronosUI.esc(text)}</div>` : "";
+  } else {
+    partialEl.innerHTML = "";
+  }
+
+  requestAnimationFrame(() => {
+    const last = el.lastElementChild;
+    if (last) last.scrollIntoView({ block: "end", behavior: "smooth" });
+    else el.scrollTop = el.scrollHeight;
+  });
 }
 
 function renderIncident(inc, snap) {
-  const panel = $("panel-incident");
+  const panel = $("panel-sop");
   if (!inc || !inc.incident_type) {
-    $("incident").innerHTML = '<div class="k">incident</div><div class="v">listening…</div>';
+    $("incident").innerHTML = ChronosUI.renderIncidentCompactHtml(null);
     $("incident-progress").style.display = "none";
+    panel.querySelectorAll(".handoff-ready, .handoff-pending").forEach((n) => n.remove());
     return;
   }
   inc._planDisplay = (snap.sop_plan && snap.sop_plan.protocol_title) || "";
-  $("incident").innerHTML = ChronosUI.renderIncidentHtml(inc);
+  $("incident").innerHTML = ChronosUI.renderIncidentCompactHtml(inc);
 
   const prog = ChronosUI.checklistProgress(snap.checklist);
   const progEl = $("incident-progress");
@@ -35,16 +47,16 @@ function renderIncident(inc, snap) {
     $("incident-progress-label").textContent = `${prog.done}/${prog.total} SOP items · ${prog.pct}%`;
   } else progEl.style.display = "none";
 
-  const exist = panel.querySelector(".escalate, .handoff-ready, .handoff-pending");
-  if (exist) exist.remove();
+  panel.querySelectorAll(".handoff-ready, .handoff-pending").forEach((n) => n.remove());
+  const insertAfter = $("next-question");
   if (snap.human_handoff_ready) {
-    panel.insertAdjacentHTML(
-      "beforeend",
+    insertAfter.insertAdjacentHTML(
+      "afterend",
       `<div class="handoff-ready">⛑ Human dispatcher handoff — intake complete · ${ChronosUI.esc(inc.escalation_reason || "high-risk case")}</div>`
     );
   } else if (inc.escalation_required && !snap.intake_complete) {
-    panel.insertAdjacentHTML(
-      "beforeend",
+    insertAfter.insertAdjacentHTML(
+      "afterend",
       `<div class="handoff-pending">📋 Gathering required info before handoff — ${(inc.missing_slots || []).length} item(s) remaining</div>`
     );
   }
@@ -58,23 +70,15 @@ function renderDispatches(snapshot) {
   el.closest(".panel")?.style && (el.closest(".panel").style.display = disp.length ? "block" : "none");
 }
 
-function renderStructuredNotes(snapshot) {
-  const el = $("structured-notes");
-  if (!el) return;
-  el.innerHTML = ChronosUI.renderStructuredNotesHtml(snapshot);
-}
-
 function renderChecklist(snapshot) {
   const el = $("checklist");
   const plan = snapshot.sop_plan;
   const hint = $("checklist-hint");
-  if (plan && plan.source === "merged") hint.textContent = "AI-tailored to this call";
-  else if (plan && plan.protocol_title) hint.textContent = plan.protocol_title;
-  else hint.textContent = "recommended next question highlighted";
+  if (plan && plan.source === "merged") hint.textContent = "AI-tailored · values update live";
+  else if (plan && plan.protocol_title) hint.textContent = plan.protocol_title + " · values update live";
+  else hint.textContent = "checklist + captured facts";
 
-  const html = ChronosUI.renderChecklistTable(snapshot.checklist, snapshot.recommended_slot)
-    || ChronosUI.renderChecklistGrouped(snapshot.checklist, snapshot.recommended_slot);
-  el.innerHTML = html || ChronosUI.renderChecklistFlat(snapshot.checklist, snapshot.recommended_slot);
+  el.innerHTML = ChronosUI.renderMergedIntakeHtml(snapshot, snapshot.recommended_slot);
   if (!el.innerHTML) el.innerHTML = '<div class="empty">Waiting for incident classification…</div>';
 }
 
@@ -86,8 +90,13 @@ function renderNextQuestion(snapshot) {
   const el = $("next-question");
   if (!el) return;
   const q = snapshot.recommended_question;
-  el.textContent = q || "—";
-  el.className = q ? "next-q-text" : "next-q-text empty";
+  if (q) {
+    el.textContent = "▶ " + q;
+    el.className = "next-q-inline";
+  } else {
+    el.textContent = "—";
+    el.className = "next-q-inline empty";
+  }
 }
 
 function renderEvents(events) {
@@ -258,7 +267,6 @@ async function tick() {
     renderIncident(snap.incident, snap);
     renderChecklist(snap);
     renderDispatches(snap);
-    renderStructuredNotes(snap);
     renderNextQuestion(snap);
     renderMemory(snap);
     renderEvents(events);

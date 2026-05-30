@@ -287,6 +287,10 @@ def create_app() -> FastAPI:
     def appjs() -> FileResponse:
         return FileResponse(str(config.DASHBOARD_DIR / "app.js"), media_type="application/javascript")
 
+    @app.get("/live-app.js")
+    def live_appjs() -> FileResponse:
+        return FileResponse(str(config.DASHBOARD_DIR / "live-app.js"), media_type="application/javascript")
+
     @app.get("/styles.css")
     def styles() -> FileResponse:
         return FileResponse(str(config.DASHBOARD_DIR / "styles.css"), media_type="text/css")

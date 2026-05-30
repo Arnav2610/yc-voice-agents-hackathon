@@ -88,4 +88,48 @@ def merge_notes(existing: list[StructuredNote], derived: list[StructuredNote]) -
     for n in existing:
         by_key[(n.category, n.field)] = n
     order = list(dict.fromkeys((n.category, n.field) for n in existing + derived))
-    return [by_key[k] for k in order if k in by_key]
+    merged = [by_key[k] for k in order if k in by_key]
+    return dedupe_notes(merged)
+
+
+# Collapse near-duplicate fields so the dashboard shows one canonical value per fact.
+_FIELD_ALIASES: dict[tuple[str, str], tuple[str, str]] = {
+    ("location", "address_or_landmark"): ("location", "address"),
+    ("location", "exact_location"): ("location", "address"),
+    ("location", "landmark"): ("location", "address"),
+    ("contact", "callback_phone"): ("contact", "callback_number"),
+    ("contact", "phone"): ("contact", "callback_number"),
+    ("contact", "phone_number"): ("contact", "callback_number"),
+    ("contact", "name"): ("contact", "caller_name"),
+    ("threat", "weapon"): ("threat", "weapon_type"),
+    ("threat", "armed"): ("threat", "weapon_type"),
+    ("threat", "description"): ("threat", "threat_type"),
+    ("threat", "incident_description"): ("threat", "threat_type"),
+    ("suspect", "intruder_location"): ("threat", "suspect_location"),
+}
+
+
+def _canonical_key(note: StructuredNote) -> tuple[str, str]:
+    cat = (note.category or "other").strip().lower()
+    field = (note.field or "").strip().lower()
+    return _FIELD_ALIASES.get((cat, field), (cat, field))
+
+
+def canonical_note_key(category: str, field: str) -> tuple[str, str]:
+    """Public helper for canonical (category, field) used when merging notes."""
+    return _canonical_key(StructuredNote(category=category, field=field, value="", turn=0))
+
+
+def dedupe_notes(notes: list[StructuredNote]) -> list[StructuredNote]:
+    """Keep the latest turn per canonical (category, field); drop stale duplicates."""
+    best: dict[tuple[str, str], StructuredNote] = {}
+    order: list[tuple[str, str]] = []
+    for n in notes:
+        key = _canonical_key(n)
+        prev = best.get(key)
+        if prev is None:
+            order.append(key)
+            best[key] = StructuredNote(category=key[0], field=key[1], value=n.value, turn=n.turn)
+        elif n.turn >= prev.turn:
+            best[key] = StructuredNote(category=key[0], field=key[1], value=n.value, turn=n.turn)
+    return [best[k] for k in order if k in best]

@@ -6,115 +6,227 @@
   <title>Chronos 911 — Live</title>
   <link rel="stylesheet" href="/styles.css" />
   <style>
-    body.live-view { font-size: 15px; }
+    body.live-view {
+      font-size: 14px;
+      overflow: hidden;
+    }
     .live-main {
       display: grid;
-      grid-template-columns: 1.2fr 1fr;
-      gap: 18px;
-      padding: 18px 24px 28px;
-      max-width: 1600px;
-      margin: 0 auto;
-      align-items: start;
+      grid-template-columns: 1.12fr 0.88fr;
+      gap: 14px;
+      padding: 14px 20px 16px;
+      height: calc(100vh - 108px);
+      min-height: 480px;
+      max-width: none;
+      margin: 0;
+      align-items: stretch;
     }
-    .live-transcript-card {
-      position: sticky;
-      top: 12px;
-      min-height: calc(100vh - 140px);
-      max-height: calc(100vh - 120px);
+    .live-operator {
       display: flex;
       flex-direction: column;
+      min-height: 0;
     }
-    #transcript { flex: 1; min-height: 0; overflow-y: auto; }
-    .turn { font-size: 16px; padding: 11px 14px; border-radius: 12px; margin-bottom: 8px; line-height: 1.45; }
-    .turn .who {
-      display: block; font-size: 10px; font-weight: 800; letter-spacing: .7px;
-      text-transform: uppercase; margin-bottom: 4px; opacity: .75;
+    .live-split {
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      gap: 12px;
+      flex: 1;
+      min-height: 0;
     }
-    .turn.caller { background: rgba(78,163,255,.08); border: 1px solid rgba(78,163,255,.2); }
-    .turn.agent { background: rgba(54,211,153,.07); border: 1px solid rgba(54,211,153,.22); }
+    .zone-transcript,
+    .zone-sop {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+      padding: 11px 13px;
+    }
+    .zone-transcript h2,
+    .zone-sop h2 {
+      margin: 0 0 6px;
+      font-size: 11.5px;
+    }
+    #transcript {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding-right: 3px;
+    }
+    .live-view .turn {
+      font-size: 12px;
+      line-height: 1.38;
+      padding: 5px 9px;
+      border-radius: 7px;
+      margin: 0;
+      background: var(--panel2);
+      border: 1px solid var(--line);
+    }
+    .live-view .turn .who {
+      display: block;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .65px;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+      opacity: .8;
+    }
+    .live-view .turn.caller { border-left: 3px solid var(--accent); }
+    .live-view .turn.agent { background: #10233a; border-left: 3px solid var(--ok); }
+    .live-view .turn.background { border-style: dashed; border-left: 3px solid var(--high); }
+    #partial {
+      flex-shrink: 0;
+      margin-top: 5px;
+      min-height: 0;
+    }
     .partial-bubble {
-      margin-top: 8px; padding: 10px 12px; border-radius: 10px;
-      background: rgba(255,209,102,.08); border: 1px dashed rgba(255,209,102,.35);
-      color: #ffe8a8; font-style: italic; animation: pulse-partial 1.4s ease infinite;
+      padding: 5px 9px;
+      border-radius: 7px;
+      font-size: 11px;
+      background: rgba(255,209,102,.08);
+      border: 1px dashed rgba(255,209,102,.35);
+      color: #ffe8a8;
+      font-style: italic;
     }
-    @keyframes pulse-partial { 0%,100% { opacity: .85; } 50% { opacity: 1; } }
+    .sop-head-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+    .sop-head-row h2 { margin: 0; }
+    .sop-head-row .hint {
+      font-size: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 52%;
+    }
+    .progress-compact { margin: 0 0 5px; }
+    .progress-compact .progress-label { font-size: 10px; margin-bottom: 3px; }
+    .progress-compact .progress-bar { height: 4px; }
+    .next-q-inline {
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.35;
+      color: #cfe6ff;
+      padding: 5px 8px;
+      border-radius: 7px;
+      background: rgba(78,163,255,.08);
+      border: 1px solid rgba(78,163,255,.22);
+      margin-bottom: 5px;
+    }
+    .next-q-inline.empty {
+      color: var(--muted);
+      font-weight: 500;
+      font-style: italic;
+      font-size: 11px;
+      background: transparent;
+      border-color: transparent;
+      padding: 0 2px;
+    }
+    #checklist {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    #checklist .sop-table-wrap { overflow: hidden; height: 100%; margin: 0; }
+    #checklist .sop-table { font-size: 10.5px; table-layout: fixed; width: 100%; }
+    #checklist .sop-table th { padding: 4px 6px; font-size: 9px; }
+    #checklist .sop-table td { padding: 3px 6px; overflow: hidden; text-overflow: ellipsis; }
+    #checklist .intake-val { color: var(--ok); font-weight: 700; font-size: 10.5px; }
+    #checklist .intake-q { color: var(--muted); font-size: 10.5px; font-style: italic; }
+
+    .live-aside {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
     .hero-incident {
       background: linear-gradient(145deg, #162a45 0%, #0f1724 55%, #101828 100%);
       border: 1px solid rgba(78,163,255,.22);
-      border-radius: 16px;
-      padding: 16px 18px 14px;
-      margin-bottom: 12px;
-      box-shadow: 0 8px 32px rgba(0,0,0,.35);
+      border-radius: 12px;
+      padding: 12px 14px;
+      flex-shrink: 0;
     }
-    .hero-incident .proto { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--accent); font-weight: 700; }
-    .hero-incident .title { font-size: 22px; font-weight: 800; margin: 4px 0 10px; letter-spacing: .2px; }
-    .hero-incident .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .progress-wrap { margin: 12px 0 4px; }
-    .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
-    .progress-bar { height: 7px; background: var(--panel2); border-radius: 999px; overflow: hidden; border: 1px solid var(--line); }
-    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--ok)); border-radius: 999px; transition: width .35s ease; }
-    .next-card {
-      background: linear-gradient(135deg, rgba(78,163,255,.12), rgba(54,211,153,.06));
-      border-color: rgba(78,163,255,.35);
+    .hero-incident .proto {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--accent);
+      font-weight: 700;
     }
-    #nextq { font-size: 20px; font-weight: 700; line-height: 1.45; color: #d6ebff; }
-    .checklist-group { margin-bottom: 12px; }
-    .checklist-group-head {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px;
-      color: var(--muted); margin: 0 0 6px 2px;
+    .hero-incident .title {
+      font-size: 18px;
+      font-weight: 800;
+      margin: 3px 0 8px;
     }
-    .checklist-group-head .ico { font-size: 14px; }
-    .sop-item {
-      display: flex; gap: 10px; align-items: flex-start;
-      padding: 9px 11px; border-radius: 10px;
-      background: var(--panel2); border: 1px solid var(--line);
-      margin-bottom: 6px; transition: border-color .2s, box-shadow .2s;
+    .hero-incident .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .progress-wrap { margin: 8px 0 0; }
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10.5px;
+      color: var(--muted);
+      margin-bottom: 4px;
     }
-    .sop-item.rec { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(78,163,255,.25) inset; background: rgba(78,163,255,.06); }
-    .sop-item.done { opacity: .5; }
-    .sop-item .mark { font-weight: 800; min-width: 18px; font-size: 14px; }
-    .sop-item.done .mark { color: var(--ok); }
-    .sop-item.rec .mark { color: var(--accent); }
-    .sop-item .body { flex: 1; }
-    .sop-item .q { font-size: 14px; line-height: 1.35; }
-    .sop-item .slot-id { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
-    .incident-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
-    .incident-grid .cell .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
-    .incident-grid .cell .v { font-size: 15px; font-weight: 700; margin-top: 2px; }
-    .incident-grid .cell.span2 { grid-column: span 2; }
-    .fact-strip { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
-    .fact-chip {
-      font-size: 11.5px; padding: 4px 10px; border-radius: 999px;
-      background: rgba(78,163,255,.1); border: 1px solid rgba(78,163,255,.25); color: #c8e4ff;
+    .progress-bar {
+      height: 5px;
+      background: var(--panel2);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid var(--line);
     }
-    .fact-chip.hazard { background: rgba(255,93,108,.12); border-color: rgba(255,93,108,.3); color: #ffd0d5; }
-    .fact-chip.third { background: rgba(255,159,67,.12); border-color: rgba(255,159,67,.3); color: #ffe0b0; }
-    .cad-board {
-      display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px;
-      border-top: 1px solid var(--line);
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--ok));
+      border-radius: 999px;
+      transition: width .35s ease;
     }
+    .cad-panel { padding: 10px 12px; }
+    .cad-panel h2 { margin-bottom: 8px; font-size: 11px; }
+    .cad-board { display: flex; flex-direction: column; gap: 6px; }
     .cad-unit {
-      flex: 1 1 140px; min-width: 130px; padding: 10px 12px; border-radius: 10px;
-      background: rgba(54,211,153,.08); border: 1px solid rgba(54,211,153,.28);
-      position: relative; overflow: hidden;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(54,211,153,.08);
+      border: 1px solid rgba(54,211,153,.28);
     }
-    .cad-unit::before {
-      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-      background: linear-gradient(90deg, var(--ok), transparent);
-      animation: cad-scan 2s linear infinite;
+    .cad-unit .u-type { font-weight: 800; font-size: 11.5px; color: var(--ok); }
+    .cad-unit .u-status {
+      font-size: 9.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-top: 2px;
     }
-    @keyframes cad-scan { 0% { opacity: .4; } 50% { opacity: 1; } 100% { opacity: .4; } }
-    .cad-unit .u-type { font-weight: 800; font-size: 12px; color: var(--ok); letter-spacing: .5px; }
-    .cad-unit .u-status { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-top: 2px; }
-    .cad-unit .u-loc { font-size: 11.5px; margin-top: 4px; color: var(--ink); font-weight: 600; }
-    .right-col { max-height: calc(100vh - 100px); overflow-y: auto; padding-right: 4px; }
-    .panel.compact { padding: 12px 14px; }
-    .panel.compact h2 { margin-bottom: 8px; font-size: 11px; }
+    .cad-unit .u-loc { font-size: 11px; margin-top: 3px; font-weight: 600; }
+    .cad-unit .u-reason { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .panel.compact { padding: 10px 12px; }
+    .panel.compact h2 { margin-bottom: 6px; font-size: 11px; }
+    .live-aside .memory { max-height: 160px; overflow-y: auto; }
+    .handoff-ready, .handoff-pending {
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
     @media (max-width: 960px) {
-      .live-main { grid-template-columns: 1fr; }
-      .live-transcript-card { position: static; max-height: none; min-height: 50vh; }
-      .right-col { max-height: none; }
+      body.live-view { overflow: auto; }
+      .live-main {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 0;
+      }
+      .live-split { grid-template-rows: minmax(220px, 38vh) minmax(260px, 38vh); }
+      .live-aside { max-height: none; overflow: visible; }
     }
   </style>
 </head>
@@ -138,286 +250,58 @@
   </header>
 
   <main class="live-main">
-    <div class="panel live-transcript-card">
-      <h2>Live call</h2>
-      <div id="transcript" class="transcript"></div>
-      <div id="partial" class="partial"></div>
-    </div>
+    <section class="live-operator">
+      <div class="live-split">
+        <div class="panel zone-transcript">
+          <h2>Live call</h2>
+          <div id="transcript" class="transcript"></div>
+          <div id="partial" class="partial"></div>
+        </div>
 
-    <div class="col right-col">
+        <div class="panel zone-sop" id="panel-sop">
+          <div class="sop-head">
+            <div class="sop-head-row">
+              <h2>SOP intake</h2>
+              <span class="hint" id="checklist-hint">checklist + captured facts</span>
+            </div>
+            <div id="incident" class="incident incident-compact"></div>
+            <div id="incident-progress" class="progress-wrap progress-compact" style="display:none">
+              <div class="progress-label"><span id="incident-progress-label">SOP progress</span></div>
+              <div class="progress-bar"><div id="incident-progress-fill" class="progress-fill" style="width:0%"></div></div>
+            </div>
+            <div id="next-question" class="next-q-inline empty">—</div>
+          </div>
+          <div id="checklist"></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="live-aside">
       <div id="hero" class="hero-incident">
-        <div class="proto" id="proto-title">Awaiting classification…</div>
-        <div class="title" id="incident-title">Listening</div>
+        <div class="proto" id="proto-title">Awaiting call…</div>
+        <div class="title" id="incident-title">Idle</div>
         <div class="meta" id="incident-badges"></div>
-        <div id="fact-strip" class="fact-strip"></div>
         <div class="progress-wrap" id="progress-wrap" style="display:none">
-          <div class="progress-label"><span>SOP intake progress</span><span id="progress-pct">0%</span></div>
+          <div class="progress-label"><span>SOP intake</span><span id="progress-pct">0%</span></div>
           <div class="progress-bar"><div id="progress-fill" class="progress-fill" style="width:0%"></div></div>
         </div>
-        <div id="cad-board" class="cad-board" style="display:none"></div>
       </div>
 
       <div id="escalate" style="display:none"></div>
 
-      <div class="panel next-card">
-        <h2>Recommended next question</h2>
-        <div id="nextq" class="empty">Listening for the incident…</div>
-      </div>
-
-      <div class="panel">
-        <h2>SOP checklist <span class="hint" id="plan-source"></span></h2>
-        <div id="checklist"></div>
-      </div>
-
-      <div class="panel">
-        <h2>Structured notes <span class="hint">live extraction</span></h2>
-        <div id="structured-notes"></div>
-      </div>
-
-      <div class="panel compact">
-        <h2>Incident snapshot</h2>
-        <div id="incident" class="incident-grid"></div>
+      <div class="panel cad-panel" id="cad-panel" style="display:none">
+        <h2>Simulated dispatch <span class="hint">tool-initiated only</span></h2>
+        <div id="cad-board" class="cad-board"></div>
       </div>
 
       <details class="panel compact">
         <summary style="cursor:pointer;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase">Retrieved memory</summary>
-        <div id="memory" class="memory" style="margin-top:8px;max-height:180px"></div>
+        <div id="memory" class="memory" style="margin-top:8px"></div>
       </details>
-    </div>
+    </aside>
   </main>
 
-  <script src="/dashboard-shared.js" onerror="console.warn('dashboard-shared.js missing — using inline fallback')"></script>
-  <script>
-    // Inline fallback when a stale dashboard process predates dashboard-shared.js.
-    if (typeof ChronosUI === "undefined") {
-      window.ChronosUI = (() => {
-        const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-        const LABELS = { structure_fire: "Structure Fire", vehicle_crash: "Vehicle Crash", medical: "Medical Emergency", non_emergency_noise: "Noise Complaint", possible_active_disturbance: "Active Disturbance", active_threat: "Active Threat" };
-        const PROTO = { structure_fire: "Fire & Smoke Protocol", vehicle_crash: "Vehicle Crash Protocol", medical: "Medical Triage Protocol", non_emergency_noise: "Non-Emergency Intake", possible_active_disturbance: "Disturbance Escalation", active_threat: "Threat Response Protocol" };
-        const CAT = { location: { label: "Location", icon: "📍" }, safety: { label: "Caller Safety", icon: "🛡" }, third_party: { label: "Third-Party Risk", icon: "👥" }, medical: { label: "Medical Status", icon: "🩺" }, vehicle: { label: "Vehicle / Road", icon: "🚗" }, hazard: { label: "Hazards", icon: "⚠" }, contact: { label: "Contact", icon: "📞" }, general: { label: "General", icon: "☑" } };
-        const MEM = { prior_call: "🕐", sop: "📋", eval_failure: "⚡", location_alias: "📍", failure_memory: "⚡" };
-        return {
-          esc, incidentLabel: (t) => LABELS[t] || (t ? t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Unknown"),
-          protocolTitle: (t) => PROTO[t] || "Emergency Intake Protocol",
-          renderTranscriptHtml(snap, events, large) {
-            const items = []; const who = { caller: "Caller", background: "Background", agent: "Chronos" };
-            for (const ev of events) {
-              if (ev.event_type === "final_transcript") items.push({ kind: "caller", text: ev.data.text });
-              else if (ev.event_type === "background_speech") items.push({ kind: "background", text: ev.data.text });
-              else if (ev.event_type === "agent_guidance") items.push({ kind: "agent", text: ev.data.text });
-            }
-            if (!items.length && snap.turns) for (const t of snap.turns) items.push({ kind: "caller", text: t });
-            return items.map((i) => `<div class="turn ${i.kind}">${large ? `<span class="who">${who[i.kind]}</span>` : ""}${esc(i.text)}</div>`).join("");
-          },
-          renderChecklistGrouped(checklist, rec) {
-            const items = (checklist || []).filter((c) => c.active); if (!items.length) return "";
-            const byCat = {}; for (const c of items) { const cat = c.category || "general"; (byCat[cat] = byCat[cat] || []).push(c); }
-            const order = ["location", "safety", "third_party", "medical", "vehicle", "hazard", "contact", "general"];
-            const cats = [...order.filter((k) => byCat[k]), ...Object.keys(byCat).filter((k) => !order.includes(k))];
-            let html = "";
-            for (const cat of cats) {
-              const meta = CAT[cat] || CAT.general;
-              html += `<div class="checklist-group"><div class="checklist-group-head"><span class="ico">${meta.icon}</span>${esc(meta.label)}</div>`;
-              for (const c of byCat[cat]) {
-                const isRec = c.slot === rec; const cls = ["sop-item", c.resolved ? "done" : "", isRec ? "rec" : ""].filter(Boolean).join(" ");
-                html += `<div class="${cls}"><span class="mark">${c.resolved ? "✓" : isRec ? "▶" : "○"}</span><div class="body"><div class="q">${esc(c.question)}</div><div class="slot-id">${esc(c.label || c.slot)}</div></div></div>`;
-              }
-              html += "</div>";
-            }
-            return html;
-          },
-          renderChecklistTable(checklist, rec) {
-            const items = (checklist || []).filter((c) => c.active); if (!items.length) return "";
-            let rows = items.map((c) => {
-              const isRec = c.slot === rec; const status = c.resolved ? "Done" : isRec ? "Next" : "Open";
-              const rowCls = ["sop-row", c.resolved ? "done" : "", isRec ? "rec" : ""].filter(Boolean).join(" ");
-              const meta = CAT[c.category] || CAT.general;
-              return `<tr class="${rowCls}"><td class="sop-status">${c.resolved ? "✓" : isRec ? "▶" : "○"} ${status}</td><td class="sop-cat">${meta.icon} ${esc(meta.label)}</td><td class="sop-label">${esc(c.label || c.slot)}</td><td class="sop-q">${esc(c.question)}</td></tr>`;
-            }).join("");
-            return `<div class="sop-table-wrap"><table class="sop-table"><thead><tr><th>Status</th><th>Category</th><th>Data point</th><th>Question to ask</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-          },
-          renderStructuredNotesHtml(snap) {
-            const notes = snap.structured_notes || [];
-            if (!notes.length) return '<div class="empty">Facts will appear here as the caller speaks.</div>';
-            return `<div class="notes-table-wrap"><table class="notes-table"><thead><tr><th>Category</th><th>Field</th><th>Value</th></tr></thead><tbody>${notes.map((n) => `<tr><td class="note-cat">${esc(n.category)}</td><td class="note-field">${esc(n.field)}</td><td class="note-val">${esc(n.value)}</td></tr>`).join("")}</tbody></table></div>`;
-          },
-          renderDispatchesHtml(snap) {
-            const d = snap.dispatches || [];
-            if (!d.length) return '<div class="empty">Units dispatch when location + incident type are known.</div>';
-            const icons = { fire: "🚒", police: "🚔", ems: "🚑" };
-            return d.map((x) => `<div class="dispatch-chip"><span class="d-ico">${icons[x.unit_type] || "📡"}</span><span class="d-type">${esc((x.unit_type || "").toUpperCase())}</span><span class="d-loc">${esc(x.location || "—")}</span><span class="d-reason">${esc(x.reason || "")}</span></div>`).join("");
-          },
-          renderMemoryHtml(snap) {
-            const r = (snap.memory && snap.memory.results) || [];
-            if (!r.length) return '<div class="empty">No memory retrieved yet.</div>';
-            return r.slice(0, 6).map((m) => `<div class="mem ${esc(m.memory_type)}"><span class="type">${MEM[m.memory_type] || "💾"} ${esc((m.memory_type || "").replace(/_/g, " "))}</span><div class="content">${esc(m.content)}</div></div>`).join("");
-          },
-        };
-      })();
-    }
-    function esc(s) { return ChronosUI.esc(s); }
-  </script>
-  <script>
-    const $ = id => document.getElementById(id);
-
-    function renderFactStrip(snap) {
-      const el = $("fact-strip");
-      const notes = snap.structured_notes || [];
-      if (!notes.length) { el.innerHTML = ""; return; }
-      el.innerHTML = notes.slice(0, 8).map(n => {
-        const cls = n.category === "hazard" || n.category === "threat" ? "hazard"
-          : n.category === "third_party" ? "third" : "";
-        return `<span class="fact-chip ${cls}">${esc(n.field.replace(/_/g, " "))}: ${esc(n.value)}</span>`;
-      }).join("");
-    }
-
-    function renderCadBoard(snap) {
-      const el = $("cad-board");
-      const disp = snap.dispatches || [];
-      if (!disp.length) { el.style.display = "none"; return; }
-      const icons = { fire: "🚒", police: "🚔", ems: "🚑" };
-      el.style.display = "flex";
-      el.innerHTML = disp.map(d => `
-        <div class="cad-unit">
-          <div class="u-type">${icons[d.unit_type] || "📡"} ${esc((d.unit_type || "").toUpperCase())}</div>
-          <div class="u-status">● SIMULATED · EN ROUTE</div>
-          <div class="u-loc">${esc(d.location || "—")}</div>
-        </div>`).join("");
-    }
-
-    function renderHero(snap) {
-      const inc = snap.incident || {};
-      const plan = snap.sop_plan || {};
-      const known = inc.incident_type || inc.location_raw || (inc.hazards && inc.hazards.length);
-      if (!known) {
-        $("proto-title").textContent = "Awaiting classification…";
-        $("incident-title").textContent = "Listening";
-        $("incident-badges").innerHTML = "";
-        $("progress-wrap").style.display = "none";
-        return;
-      }
-      $("proto-title").textContent = plan.protocol_title || ChronosUI.protocolTitle(inc.incident_type);
-      $("incident-title").textContent = plan.display_name || ChronosUI.incidentLabel(inc.incident_type);
-      $("incident-badges").innerHTML = [
-        inc.incident_type ? `<span class="badge risk-${inc.risk_level || 'unknown'}">${esc(inc.risk_level || 'unknown')} risk</span>` : "",
-        inc.upgraded_to ? `<span class="badge risk-high">↑ ${esc(inc.upgraded_to.replace(/_/g, " "))}</span>` : "",
-        plan.source === "merged" ? `<span class="pill">AI-tailored plan</span>` : "",
-      ].filter(Boolean).join("");
-      const items = (snap.checklist || []).filter(c => c.active);
-      const done = items.filter(c => c.resolved).length;
-      const total = items.length;
-      if (total > 0) {
-        const pct = Math.round((done / total) * 100);
-        $("progress-wrap").style.display = "block";
-        $("progress-pct").textContent = `${done}/${total} · ${pct}%`;
-        $("progress-fill").style.width = pct + "%";
-      } else $("progress-wrap").style.display = "none";
-      renderFactStrip(snap);
-      renderCadBoard(snap);
-    }
-
-    function renderEscalation(snap) {
-      const el = $("escalate");
-      const inc = snap.incident || {};
-      const missing = snap.missing_slot_labels || inc.missing_slots || [];
-      const missingTxt = Array.isArray(missing) && missing.length
-        ? missing.map(l => typeof l === "string" ? l : l.replace(/_/g, " ")).join(", ")
-        : `${(inc.missing_slots || []).length} item(s)`;
-      if (snap.human_handoff_ready) {
-        el.style.display = "block";
-        el.className = "handoff-ready";
-        el.innerHTML = "⛑ Ready for human dispatcher handoff — all intake complete";
-      } else if (inc.escalation_required && !snap.intake_complete) {
-        el.style.display = "block";
-        el.className = "handoff-pending";
-        el.innerHTML = `📋 Stay on line — still need: <strong>${esc(missingTxt)}</strong>`;
-      } else el.style.display = "none";
-    }
-
-    function renderStructuredNotes(snap) {
-      $("structured-notes").innerHTML = ChronosUI.renderStructuredNotesHtml(snap);
-    }
-
-    function renderIncidentGrid(inc) {
-      if (!inc || (!inc.incident_type && !inc.location_raw)) {
-        $("incident").innerHTML = '<div class="empty" style="grid-column:span 2">Detecting incident…</div>';
-        return;
-      }
-      const tp = inc.third_party_risk || "unknown";
-      const hz = (inc.hazards || []).map(h => `<span class="hazard">${esc(h)}</span>`).join("") || "—";
-      $("incident").innerHTML = [
-        cell("Type", esc(inc.incident_type || "—").replace(/_/g, " ")),
-        cell("Caller safety", esc(inc.caller_safety)),
-        cell("Location", esc(inc.location_raw || "unknown") + (inc.location_needs_confirmation && inc.location_raw ? ' <span class="badge risk-medium">confirm</span>' : "")),
-        cell("3rd-party risk", `<span class="tp-${tp}">${esc(tp)}</span>`),
-        cell("Hazards", hz, true),
-      ].join("");
-      function cell(k, v, span2) {
-        return `<div class="cell${span2 ? " span2" : ""}"><div class="k">${k}</div><div class="v">${v}</div></div>`;
-      }
-    }
-
-    function renderChecklist(snap) {
-      const el = $("checklist");
-      const plan = snap.sop_plan;
-      const src = plan && plan.source === "merged" ? " · AI-tailored" : plan && plan.source === "llm" ? " · dynamic" : "";
-      $("plan-source").textContent = src;
-      el.innerHTML = ChronosUI.renderChecklistTable(snap.checklist, snap.recommended_slot)
-        || ChronosUI.renderChecklistGrouped(snap.checklist, snap.recommended_slot);
-      if (!el.innerHTML) el.innerHTML = '<div class="empty">Classifying incident — checklist will appear when type is detected.</div>';
-    }
-
-    function renderTranscriptLive(snap, events) {
-      $("transcript").innerHTML = ChronosUI.renderTranscriptHtml(snap, events, true);
-      $("transcript").scrollTop = $("transcript").scrollHeight;
-      const finals = events.filter(e => e.event_type === "final_transcript");
-      const partials = events.filter(e => e.event_type === "partial_transcript");
-      const lastFinalTs = finals.length ? finals[finals.length - 1].timestamp_ms : 0;
-      const lastPartial = partials.length ? partials[partials.length - 1] : null;
-      if (lastPartial && lastPartial.timestamp_ms > lastFinalTs && lastPartial.data.text) {
-        $("partial").innerHTML = `<div class="partial-bubble">🎙 ${esc(lastPartial.data.text)}</div>`;
-      } else $("partial").innerHTML = "";
-    }
-
-    function renderMemoryLive(snap) {
-      $("memory").innerHTML = ChronosUI.renderMemoryHtml(snap);
-    }
-
-    async function tick() {
-      try {
-        const resp = await fetch("/chronos/latest", { cache: "no-store" });
-        if (!resp.ok) throw new Error("API " + resp.status);
-        const d = await resp.json();
-        const snap = d.snapshot || {}, events = d.events || [];
-        const live = events.length > 0 || !!snap.call_id;
-        $("dot").className = "dot " + (live ? "live" : "idle");
-        $("conn").textContent = live ? ("live" + (d.source === "live_json" ? " · via bot" : "")) : "idle — start a call at :7860";
-        renderTranscriptLive(snap, events);
-        renderHero(snap);
-        renderEscalation(snap);
-        renderIncidentGrid(snap.incident);
-        renderChecklist(snap);
-        renderStructuredNotes(snap);
-        renderMemoryLive(snap);
-        const q = snap.recommended_question;
-        $("nextq").textContent = q || "—";
-        $("nextq").className = q ? "" : "empty";
-      } catch (e) {
-        $("dot").className = "dot";
-        $("conn").textContent = "cannot reach dashboard API — restart: make dash";
-        console.error("live tick failed", e);
-      }
-    }
-
-    async function doReset() {
-      const btn = $("reset-btn");
-      btn.disabled = true;
-      try { await fetch("/chronos/actions/reset", { method: "POST" }); } catch (e) {}
-      btn.disabled = false;
-    }
-
-    setInterval(tick, 550);
-    tick();
-  </script>
+  <script src="/dashboard-shared.js"></script>
+  <script src="/live-app.js"></script>
 </body>
 </html>

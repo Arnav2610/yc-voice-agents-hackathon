@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import EndTaskFrame, LLMRunFrame
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -44,6 +45,7 @@ from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
+from pipecat.services.llm_service import FunctionCallParams
 from pipecat.turns.user_turn_strategies import FilterIncompleteUserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
@@ -128,7 +130,24 @@ async def run_bot(
         ),
     )
 
-    context = LLMContext()
+    async def dispatch_simulated_unit(params: FunctionCallParams) -> None:
+        """Dispatch a simulated fire/police/EMS unit (training only — never real responders)."""
+        args = params.arguments or {}
+        unit_type = str(args.get("unit_type") or "").strip().lower()
+        reason = str(args.get("reason") or "Simulated dispatch requested by copilot").strip()
+        if unit_type not in ("fire", "police", "ems"):
+            await params.result_callback({"ok": False, "error": "unit_type must be fire, police, or ems"})
+            return
+        sent = kernel.dispatch_simulated_units([unit_type], reason)
+        await params.result_callback(
+            {"ok": True, "dispatched": sent, "note": "Simulated dispatch only — no real responders sent."}
+        )
+
+    dispatch_tool = dispatch_simulated_unit
+    tools = ToolsSchema(standard_tools=[dispatch_tool])
+    llm.register_direct_function(dispatch_tool)
+
+    context = LLMContext(tools=tools)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(

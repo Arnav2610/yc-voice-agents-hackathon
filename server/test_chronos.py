@@ -179,6 +179,8 @@ def test_realtime_partial_knife_break_in_before_turn_end():
     assert weapon_at is not None and weapon_at <= total_words
     assert inc.location_raw and "market" in inc.location_raw.lower()
     assert "weapon" in inc.hazards
+    assert not k.state.dispatches, "units dispatch only via explicit tool call"
+    k.dispatch_simulated_units(["police"], "Active threat with weapon reported")
     assert any(d.unit_type == "police" for d in k.state.dispatches)
     note_fields = {(n.category, n.field) for n in k.state.structured_notes}
     assert ("threat", "weapon_type") in note_fields or ("threat", "weapon") in note_fields

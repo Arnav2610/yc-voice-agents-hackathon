@@ -217,9 +217,8 @@ class ChronosKernel:
             except TimeoutError:
                 memory_added = []
 
-        # 5) Simulated unit dispatch (while staying on line) + escalation policy.
+        # 5) Escalation policy (unit dispatch requires an explicit tool call).
         self._refresh_derived_notes()
-        self._maybe_dispatch_units()
         self._decide_escalation()
         if self.state.human_handoff_ready and not self.state.human_handoff_announced:
             handoff = escalate_to_human(inc.escalation_reason or "intake complete — high-risk case")
@@ -664,7 +663,6 @@ class ChronosKernel:
                 if not self.state.sop_plan:
                     self.sop.ensure_plan(self.state, inc.incident_type)
             self.sop.update_checklist(self.state)
-            self._maybe_dispatch_units()
             self._decide_escalation(extracted)
             self._refresh_derived_notes()
             if not partial:
@@ -760,7 +758,11 @@ class ChronosKernel:
         """Add or update structured notes extracted by the LLM."""
         if not notes:
             return
-        existing = {(n.category, n.field): i for i, n in enumerate(self.state.structured_notes)}
+        from chronos.note_synth import canonical_note_key, dedupe_notes
+
+        existing: dict[tuple[str, str], int] = {}
+        for i, n in enumerate(self.state.structured_notes):
+            existing[canonical_note_key(n.category, n.field)] = i
         added: list[dict[str, Any]] = []
         for raw in notes:
             if not isinstance(raw, dict):
@@ -770,30 +772,41 @@ class ChronosKernel:
             val = str(raw.get("value") or "").strip()
             if not field or not val or val.lower() in ("null", "none", "unknown"):
                 continue
-            note = StructuredNote(category=cat, field=field, value=val, turn=self._turn_index)
-            key = (cat, field)
+            key = canonical_note_key(cat, field)
             if key in existing:
                 idx = existing[key]
                 if self.state.structured_notes[idx].value != val:
-                    self.state.structured_notes[idx] = note
-                    added.append(note.to_dict())
+                    self.state.structured_notes[idx] = StructuredNote(
+                        category=key[0], field=key[1], value=val, turn=self._turn_index
+                    )
+                    added.append(self.state.structured_notes[idx].to_dict())
             else:
-                self.state.structured_notes.append(note)
+                canonical = StructuredNote(category=key[0], field=key[1], value=val, turn=self._turn_index)
+                self.state.structured_notes.append(canonical)
                 existing[key] = len(self.state.structured_notes) - 1
-                added.append(note.to_dict())
+                added.append(canonical.to_dict())
         if added:
+            self.state.structured_notes = dedupe_notes(self.state.structured_notes)
             self._emit("structured_notes_update", {"notes": [n.to_dict() for n in self.state.structured_notes], "added": added})
         self._refresh_derived_notes()
 
-    def _maybe_dispatch_units(self) -> None:
-        """Simulate dispatching units when minimum info is available — stay on line."""
+    def dispatch_simulated_units(
+        self, unit_types: list[str] | None = None, reason: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Explicit simulated unit dispatch — only runs when the LLM invokes the dispatch tool."""
+        return self._dispatch_units(unit_types=unit_types, reason=reason)
+
+    def _dispatch_units(
+        self, unit_types: list[str] | None = None, reason: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Simulate dispatching units after an explicit dispatch decision."""
         inc = self.state.incident
         if not inc.incident_type or inc.incident_type == "unknown":
-            return
+            return []
         if not inc.location_raw:
-            return
+            return []
         if inc.incident_type == "non_emergency_noise" and inc.risk_level in ("unknown", "low"):
-            return
+            return []
 
         self._new_dispatches_this_turn = []
         dispatched = {d.unit_type for d in self.state.dispatches}
@@ -802,29 +815,37 @@ class ChronosKernel:
         loc = inc.location_raw
 
         candidates: list[tuple[str, str]] = []
-        if itype in ("active_threat", "possible_active_disturbance"):
-            candidates.append(("police", "Active threat / disturbance reported"))
-        if itype == "structure_fire" or hazards & {"smoke", "visible_fire", "fire", "gas_smell"}:
-            candidates.append(("fire", "Structure fire / smoke reported"))
-        if itype in ("active_threat", "possible_active_disturbance") or "weapon" in hazards:
-            candidates.append(("police", "Active threat or weapon reported"))
-        if itype == "medical" or hazards & {"breathing", "injury"}:
-            candidates.append(("ems", "Medical emergency reported"))
-        if itype == "vehicle_crash":
-            candidates.append(("police", "Vehicle crash reported"))
-            if hazards & {"injury", "breathing", "child_in_vehicle", "child"}:
-                candidates.append(("ems", "Injuries reported at crash"))
-            if hazards & {"smoke", "fire_from_vehicle", "visible_fire"}:
-                candidates.append(("fire", "Vehicle fire / smoke reported"))
+        if unit_types:
+            default_reason = reason or "Dispatcher requested simulated unit"
+            for ut in unit_types:
+                ut_norm = str(ut).strip().lower()
+                if ut_norm in ("fire", "police", "ems"):
+                    candidates.append((ut_norm, reason or default_reason))
+        else:
+            if itype in ("active_threat", "possible_active_disturbance"):
+                candidates.append(("police", reason or "Active threat / disturbance reported"))
+            if itype == "structure_fire" or hazards & {"smoke", "visible_fire", "fire", "gas_smell"}:
+                candidates.append(("fire", reason or "Structure fire / smoke reported"))
+            if itype in ("active_threat", "possible_active_disturbance") or "weapon" in hazards:
+                candidates.append(("police", reason or "Active threat or weapon reported"))
+            if itype == "medical" or hazards & {"breathing", "injury"}:
+                candidates.append(("ems", reason or "Medical emergency reported"))
+            if itype == "vehicle_crash":
+                candidates.append(("police", reason or "Vehicle crash reported"))
+                if hazards & {"injury", "breathing", "child_in_vehicle", "child"}:
+                    candidates.append(("ems", reason or "Injuries reported at crash"))
+                if hazards & {"smoke", "fire_from_vehicle", "visible_fire"}:
+                    candidates.append(("fire", reason or "Vehicle fire / smoke reported"))
 
-        for unit_type, reason in candidates:
+        sent: list[dict[str, Any]] = []
+        for unit_type, unit_reason in candidates:
             if unit_type in dispatched:
                 continue
-            result = dispatch_unit(unit_type, loc, reason, inc.to_dict())
+            result = dispatch_unit(unit_type, loc, unit_reason, inc.to_dict())
             rec = DispatchRecord(
                 unit_type=unit_type,
                 location=loc,
-                reason=reason,
+                reason=unit_reason,
                 dispatch_id=result["dispatch_id"],
                 turn=self._turn_index,
             )
@@ -832,6 +853,14 @@ class ChronosKernel:
             self._new_dispatches_this_turn.append(result)
             self._emit("unit_dispatched", result)
             dispatched.add(unit_type)
+            sent.append(result)
+        if sent:
+            self._write_live(force=True)
+        return sent
+
+    def _maybe_dispatch_units(self) -> None:
+        """Deprecated — dispatch is explicit-only via dispatch_simulated_units()."""
+        return
 
     def _decide_escalation(self, extracted: dict[str, Any] | None = None) -> None:
         inc = self.state.incident
