@@ -150,6 +150,10 @@ What could be better:
 
 Pipecat was the right base layer for Chronos because it let us build a production-style voice architecture rather than a one-off demo script.
 
+## 6. Live Demo
+Call +1 (559) 354-3744
+and view the live status dashboard at https://aircraft-numerical-bag-bargains.trycloudflare.com/live while you're talking
+
 ## The Idea
 
 Most voice agents wait for the caller to finish speaking, then react turn-by-turn. Emergency intake is time-sensitive: seconds matter, callers ramble, and dispatchers need structured facts *while* the person is still talking.
