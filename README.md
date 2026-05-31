@@ -4,13 +4,18 @@
 
 Chronos listens to live callers, runs structured emergency intake, and guides a voice agent.
 
+See demo at https://www.youtube.com/watch?v=WfdDy0HUsfM
+
+Call +1 (559) 354-3744
+and view the live status dashboard at https://aircraft-numerical-bag-bargains.trycloudflare.com/live while you're talking
+
 # Chronos 911 Submission
 
 ## 1. What is this?
 
 Chronos 911 is a simulated 911 call-taker copilot for training, evaluation, and emergency operations research.
 
-Callers speak naturally over voice through WebRTC or Twilio. Chronos listens in real time, classifies the incident, runs a live SOP checklist, retrieves institutional memory, geocodes landmarks for simulated dispatch, and recommends escalation through a streaming operator dashboard.
+Callers speak naturally over voice through WebRTC or Twilio. Chronos listens in real time, classifies the incident, runs a live standard operating protocol (SOP) checklist, retrieves institutional memory, geocodes landmarks for simulated dispatch, and recommends escalation through a streaming operator dashboard.
 
 The core idea is **mid-turn action**.
 
