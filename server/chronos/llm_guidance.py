@@ -124,32 +124,18 @@ HUMAN_HANDOFF_READY and not yet announced."""
 # --------------------------------------------------------------------------- #
 # Optional offline LLM (Nemotron over OpenAI-compatible endpoint)
 # --------------------------------------------------------------------------- #
-_client: Any = None
-
-
 def _nemotron_client():
-    global _client
-    if _client is None:
-        from openai import OpenAI
+    from openai import OpenAI
 
-        _client = OpenAI(
-            api_key=os.getenv("NEMOTRON_LLM_API_KEY", "EMPTY"),
-            base_url=os.getenv("NEMOTRON_LLM_URL", "http://localhost:8000/v1"),
-            max_retries=0,
-        )
-    return _client
-
-
-def _fast_llm() -> bool:
-    return os.getenv("CHRONOS_FAST_LLM", "").lower() in ("1", "true", "yes")
+    return OpenAI(
+        api_key=os.getenv("NEMOTRON_LLM_API_KEY", "EMPTY"),
+        base_url=os.getenv("NEMOTRON_LLM_URL", "http://localhost:8000/v1"),
+    )
 
 
 def _chat(messages: list[dict[str, str]], enable_thinking: bool = True, max_tokens: int = 700) -> str:
     """Single non-streaming completion. Returns content (reasoning stripped if a
     reasoning parser surfaces it as a separate field)."""
-    if _fast_llm():
-        enable_thinking = False
-        max_tokens = min(max_tokens, 280)
     client = _nemotron_client()
     resp = client.chat.completions.create(
         model=os.getenv("NEMOTRON_LLM_MODEL", "nvidia/nemotron-3-super"),
@@ -342,89 +328,6 @@ Rules:
 - consciousness / breathing / injury_status: patient status in caller's words.
 - Custom slot ids: summarize only what the caller said about that specific question.
 """
-
-
-_SLOT_INTAKE_PROMPT = """\
-Transcript:
-{transcript}
-
-OPEN checklist slots (add to resolved_slots if caller already answered anywhere):
-{open_slots}
-
-RESOLVED slots needing operator summaries (write slot_values for each):
-{resolved_slots}
-
-Return JSON only:
-{{"resolved_slots": ["open_slot_id", ...], "slot_values": {{"slot_id": "max 120 chars", ...}}}}
-
-Rules:
-- resolved_slots: only ids from OPEN list clearly answered in the transcript.
-- slot_values: only for RESOLVED list ids; paraphrase caller facts; no generic placeholders.
-- Never invent slot ids not listed above.
-"""
-
-
-async def resolve_intake_slots_llm(
-    transcript: str,
-    slots_by_id: dict[str, dict[str, str]],
-    open_ids: list[str],
-    resolved_need_display: list[str],
-) -> tuple[set[str], dict[str, str]]:
-    """Single LLM call: resolve open slots + write Known/ask summaries."""
-    import asyncio
-
-    if _fast_llm() or (not open_ids and not resolved_need_display):
-        return set(), {}
-    try:
-        open_lines = []
-        for sid in open_ids:
-            s = slots_by_id.get(sid, {})
-            label = s.get("label") or sid.replace("_", " ")
-            question = s.get("question") or ""
-            open_lines.append(f"- {sid} ({label}): {question}")
-        resolved_lines = []
-        for sid in resolved_need_display:
-            s = slots_by_id.get(sid, {})
-            label = s.get("label") or sid.replace("_", " ")
-            question = s.get("question") or ""
-            resolved_lines.append(f"- {sid} ({label}): {question}")
-        if not open_lines and not resolved_lines:
-            return set(), {}
-        tail = transcript[-1800:]
-        prompt = _SLOT_INTAKE_PROMPT.format(
-            transcript=tail,
-            open_slots="\n".join(open_lines) or "(none)",
-            resolved_slots="\n".join(resolved_lines) or "(none)",
-        )
-        raw = await asyncio.to_thread(
-            _chat,
-            [
-                {"role": "system", "content": _EXTRACTION_SYSTEM},
-                {"role": "user", "content": prompt},
-            ],
-            False,
-            380,
-        )
-        data = _extract_json(raw)
-        if not data:
-            return set(), {}
-        resolved: set[str] = set()
-        if isinstance(data.get("resolved_slots"), list):
-            resolved = {str(s) for s in data["resolved_slots"] if str(s) in open_ids}
-        displays: dict[str, str] = {}
-        allowed_display = set(resolved_need_display) | resolved
-        if isinstance(data.get("slot_values"), dict):
-            for k, v in data["slot_values"].items():
-                key = str(k)
-                if key not in allowed_display:
-                    continue
-                val = str(v or "").strip()
-                if val and val.lower() not in ("null", "none", "unknown", "n/a", "confirmed", "provided"):
-                    if not _GENERIC_SLOT_VALUE(val):
-                        displays[key] = val
-        return resolved, displays
-    except Exception:
-        return set(), {}
 
 
 async def resolve_slot_display_values_llm(
