@@ -2,7 +2,7 @@
 
 **Voice Agent for 911 Calls** 
 
-Chronos listens to live callers, runs structured emergency intake, and guides a voice agent.
+Chronos listens to live callers, runs structured emergency intake, and guides a voice agent. Everything was built from scratch at the hackathon.
 
 See demo at https://www.youtube.com/watch?v=WfdDy0HUsfM
 
@@ -23,11 +23,9 @@ Emergency callers do not speak in clean turns. They ramble, panic, repeat themse
 
 The metric we optimize is not “conversation quality.” It is **time to first correct action**: the time until the system identifies the right emergency path, asks the next critical question, recommends escalation, or begins  dispatch.
 
-In real emergency response, seconds matter. Chronos is designed to reduce the delay between a caller saying something important and the system acting on it.
+In real emergency response, seconds matter. Chronos is designed to reduce the delay between a caller saying something important and the system acting on it. According to studies on cardiac arrests, median time to CPR is 176s guided by 911, while immediate CPR doubles or triples survival odds, adding up to thousands of lives saved per year at scale.
 
 Our second major feature is **self-improvement at the policy level**. After Cekura evals, Chronos does not just rewrite a prompt. It turns failures into safe YAML policy patches, learned knowledge via Supermemory, reruns regression tests, and only accepts fixes that improve the agent without introducing new safety regressions.
-
-The hackathon demo focuses on high-stakes 911-style scenarios like structure fires, active threats, trapped persons, medical emergencies, and location ambiguity. Chronos is not intended to replace human dispatchers. It is a copilot and training system that helps call-takers move faster, miss fewer critical questions, and learn from every evaluated failure.
 
 ## 2. Demo video
 
