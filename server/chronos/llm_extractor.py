@@ -138,7 +138,7 @@ async def extract_call_state(transcript: str, *, partial: bool = True) -> dict[s
         from chronos.llm_guidance import _chat, _extract_json
 
         template = _EXTRACTION_PROMPT_PARTIAL if partial else _EXTRACTION_PROMPT_FINAL
-        tail = transcript[-1200:] if partial else transcript[-2000:]
+        tail = transcript[-1200:] if partial else transcript[-2500:]
         prompt = template.format(transcript=tail)
         raw = await asyncio.to_thread(
             _chat,
@@ -147,7 +147,7 @@ async def extract_call_state(transcript: str, *, partial: bool = True) -> dict[s
                 {"role": "user", "content": prompt},
             ],
             False,
-            260 if partial else 420,
+            320 if partial else 500,
         )
         return _extract_json(raw)
     except Exception:
