@@ -15,11 +15,12 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from chronos import config
+from chronos.call_registry import get_call, list_calls, pick_default_call_id, upsert_call
 from chronos.events import STORE
 
 # Registry for the currently active live call kernel (set by the bot).
@@ -45,6 +46,63 @@ def _read_runtime(name: str) -> Any:
         except Exception:
             return {}
     return {}
+
+
+def _ingest_key_ok(provided: str | None) -> bool:
+    expected = os.getenv("DASHBOARD_INGEST_KEY", "").strip()
+    if not expected:
+        return False
+    return provided == expected
+
+
+def _payload_for_call(call_id: str | None) -> dict[str, Any]:
+    """Resolve live payload: in-process kernel, registry, or legacy live.json."""
+    if call_id:
+        reg = get_call(call_id)
+        if reg:
+            return {**reg, "source": "registry"}
+        k = LIVE["kernel"]
+        if k and k.state.call_id == call_id:
+            return {
+                "snapshot": k.state.snapshot(),
+                "events": STORE.list(call_id)[-100:],
+                "disclaimer": config.SIMULATION_DISCLAIMER,
+                "source": "in_process",
+            }
+        return {
+            "snapshot": {},
+            "events": [],
+            "disclaimer": config.SIMULATION_DISCLAIMER,
+            "source": "missing",
+        }
+
+    k = LIVE["kernel"]
+    if k:
+        return {
+            "snapshot": k.state.snapshot(),
+            "events": STORE.list_latest(),
+            "disclaimer": config.SIMULATION_DISCLAIMER,
+            "source": "in_process",
+        }
+
+    default_id = pick_default_call_id()
+    if default_id:
+        reg = get_call(default_id)
+        if reg:
+            return {**reg, "source": "registry"}
+
+    live = _read_runtime("live.json")
+    snap = (live or {}).get("snapshot") or {}
+    has_live = bool(live) and (live.get("events") or snap.get("call_id"))
+    if has_live:
+        return {**live, "source": "live_json"}
+
+    return {
+        "snapshot": _read_runtime("latest.json") or {},
+        "events": [],
+        "disclaimer": config.SIMULATION_DISCLAIMER,
+        "source": "latest_json",
+    }
 
 
 def create_app() -> FastAPI:
@@ -91,53 +149,62 @@ def create_app() -> FastAPI:
     @app.get("/chronos/health")
     def health() -> dict[str, Any]:
         k = LIVE["kernel"]
+        registry_calls = list_calls()
+        active = [c for c in registry_calls if c.get("live")]
         return {
             "ok": True,
             "mode": config.CHRONOS_MODE,
             "disclaimer": config.SIMULATION_DISCLAIMER,
-            "live_call": k.state.call_id if k else None,
+            "live_call": k.state.call_id if k else (active[0]["call_id"] if active else None),
             "calls": STORE.call_ids(),
+            "registry_calls": len(registry_calls),
+            "active_calls": len(active),
+            "remote_ingest": bool(os.getenv("DASHBOARD_INGEST_KEY", "").strip()),
         }
 
+    @app.get("/chronos/calls")
+    def calls() -> dict[str, Any]:
+        rows = list_calls(include_recent_complete=True)
+        default_id = pick_default_call_id()
+        return {"calls": rows, "default_call_id": default_id}
+
+    @app.post("/chronos/ingest")
+    async def ingest(
+        body: dict[str, Any],
+        x_chronos_ingest_key: str | None = Header(default=None, alias="X-Chronos-Ingest-Key"),
+    ) -> dict[str, Any]:
+        if not _ingest_key_ok(x_chronos_ingest_key):
+            raise HTTPException(status_code=401, detail="invalid ingest key")
+        call_id = upsert_call(body)
+        if not call_id:
+            raise HTTPException(status_code=400, detail="missing call_id in snapshot")
+        return {"ok": True, "call_id": call_id}
+
     @app.get("/chronos/state")
-    def state() -> dict[str, Any]:
-        k = LIVE["kernel"]
-        if k:
-            return k.state.snapshot()
-        return _read_runtime("latest.json") or {}
+    def state(call_id: str | None = Query(default=None)) -> dict[str, Any]:
+        payload = _payload_for_call(call_id)
+        return payload.get("snapshot") or {}
 
     @app.get("/chronos/latest")
-    def latest() -> dict[str, Any]:
-        # In-process live kernel wins; otherwise fall back to the disk-mirrored
-        # live state written by the bot process (cross-process live view).
-        k = LIVE["kernel"]
-        if k:
-            payload = {
-                "snapshot": k.state.snapshot(),
-                "events": STORE.list_latest(),
-                "disclaimer": config.SIMULATION_DISCLAIMER,
-                "source": "in_process",
-            }
-        else:
-            live = _read_runtime("live.json")
-            snap = (live or {}).get("snapshot") or {}
-            has_live = bool(live) and (live.get("events") or snap.get("call_id"))
-            if has_live:
-                payload = {**live, "source": "live_json"}
-            else:
-                payload = {
-                    "snapshot": _read_runtime("latest.json") or {},
-                    "events": [],
-                    "disclaimer": config.SIMULATION_DISCLAIMER,
-                    "source": "latest_json",
-                }
+    def latest(call_id: str | None = Query(default=None)) -> dict[str, Any]:
+        payload = _payload_for_call(call_id)
         return JSONResponse(payload, headers={"Cache-Control": "no-store, max-age=0"})
 
     @app.get("/chronos/events")
-    def events_latest() -> list[dict[str, Any]]:
+    def events_latest(call_id: str | None = Query(default=None)) -> list[dict[str, Any]]:
+        if call_id:
+            reg = get_call(call_id)
+            if reg:
+                return reg.get("events") or []
+            return STORE.list(call_id)
         evs = STORE.list_latest()
         if evs:
             return evs
+        default_id = pick_default_call_id()
+        if default_id:
+            reg = get_call(default_id)
+            if reg:
+                return reg.get("events") or []
         return (_read_runtime("live.json") or {}).get("events", [])
 
     @app.get("/chronos/events/{call_id}")
@@ -404,4 +471,5 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
 
     load_dotenv(override=True)  # so browser-driven actions use real Supermemory/Nemotron
-    uvicorn.run(app, host="0.0.0.0", port=config.DASHBOARD_PORT, log_level="info")
+    port = int(os.getenv("PORT", os.getenv("CHRONOS_DASHBOARD_PORT", "7861")))
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

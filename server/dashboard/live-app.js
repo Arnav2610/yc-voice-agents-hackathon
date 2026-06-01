@@ -2,6 +2,67 @@
 
 const $ = (id) => document.getElementById(id);
 
+const CALL_SELECT_KEY = "chronos-selected-call-id";
+let selectedCallId = localStorage.getItem(CALL_SELECT_KEY) || "";
+
+function formatCallLabel(row) {
+  const phone = row.caller_from || "unknown caller";
+  const inc = row.incident_type ? row.incident_type.replace(/_/g, " ") : "listening";
+  const live = row.live ? "● LIVE" : "ended";
+  const shortId = (row.call_id || "").slice(-8);
+  return `${live} · ${phone} · ${inc} · …${shortId}`;
+}
+
+function populateCallSelect(rows, defaultId) {
+  const sel = $("call-select");
+  if (!sel) return;
+
+  const rowIds = new Set(rows.map((r) => r.call_id));
+  for (const row of rows) {
+    const label = formatCallLabel(row);
+    let opt = sel.querySelector(`option[value="${CSS.escape(row.call_id)}"]`);
+    if (opt) {
+      if (opt.textContent !== label) opt.textContent = label;
+    } else {
+      opt = document.createElement("option");
+      opt.value = row.call_id;
+      opt.textContent = label;
+      sel.appendChild(opt);
+    }
+  }
+  for (const opt of Array.from(sel.options)) {
+    if (opt.value && !rowIds.has(opt.value)) opt.remove();
+  }
+
+  const prev = selectedCallId;
+  let next = prev;
+  if (prev && !rowIds.has(prev)) {
+    next = "";
+    selectedCallId = "";
+    localStorage.removeItem(CALL_SELECT_KEY);
+  } else if (!prev && defaultId && rowIds.has(defaultId)) {
+    next = defaultId;
+    selectedCallId = defaultId;
+  } else if (!prev) {
+    next = "";
+    selectedCallId = "";
+  }
+  if (sel.value !== next) sel.value = next;
+}
+
+if ($("call-select")) {
+  $("call-select").addEventListener("change", (e) => {
+    selectedCallId = e.target.value || "";
+    if (selectedCallId) localStorage.setItem(CALL_SELECT_KEY, selectedCallId);
+    else localStorage.removeItem(CALL_SELECT_KEY);
+    tick();
+  });
+}
+
+function queryForSelectedCall() {
+  return selectedCallId ? `?call_id=${encodeURIComponent(selectedCallId)}` : "";
+}
+
 function renderTranscriptLive(snap, events) {
   const el = $("transcript");
   el.innerHTML = ChronosUI.renderTranscriptHtml(snap, events, true);
@@ -141,24 +202,36 @@ function renderMemoryLive(snap) {
 
 async function tick() {
   try {
-    const [latestResp, healthResp] = await Promise.all([
-      fetch("/chronos/latest", { cache: "no-store" }),
+    const q = queryForSelectedCall();
+    const [latestResp, healthResp, callsResp] = await Promise.all([
+      fetch("/chronos/latest" + q, { cache: "no-store" }),
       fetch("/chronos/health", { cache: "no-store" }),
+      fetch("/chronos/calls", { cache: "no-store" }),
     ]);
     if (!latestResp.ok) throw new Error("API " + latestResp.status);
     const d = await latestResp.json();
     const health = healthResp.ok ? await healthResp.json() : {};
+    const callsData = callsResp.ok ? await callsResp.json() : { calls: [] };
+    populateCallSelect(callsData.calls || [], callsData.default_call_id);
+
     const snap = d.snapshot || {};
     const events = d.events || [];
+    const callId = snap.call_id || health.live_call;
+    const row = (callsData.calls || []).find((c) => c.call_id === callId);
     const lastTs = events.length ? events[events.length - 1].timestamp_ms : 0;
     const recent = lastTs && Date.now() - lastTs < 120000;
-    const isLive = !!health.live_call || (recent && events.length > 0);
+    const isLive = !!(row && row.live) || !!health.live_call || (recent && events.length > 0);
     snap._dispatch_events = events.filter((e) => e.event_type === "unit_dispatched").length;
 
     $("dot").className = "dot " + (isLive ? "live" : "idle");
+    const viewing = selectedCallId
+      ? `viewing ${selectedCallId.slice(-8)}`
+      : callId
+        ? `auto · ${callId.slice(-8)}`
+        : "no calls yet";
     $("conn").textContent = isLive
-      ? "live" + (d.source === "live_json" ? " · via bot" : "")
-      : "idle — start a call at :7860";
+      ? `live · ${viewing}` + (d.source === "registry" ? " · cloud" : d.source === "live_json" ? " · local" : "")
+      : `idle · ${viewing} — dial your Twilio number`;
 
     renderTranscriptLive(snap, events);
     renderSopContext(snap.incident, snap, isLive);

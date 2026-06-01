@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: chronos-911-dashboard
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile.dashboard
+    dockerContext: ./server
+    plan: free
+    healthCheckPath: /chronos/health
+    envVars:
+      - key: DASHBOARD_INGEST_KEY
+        generateValue: true
+      - key: MAPS_API_KEY
+        sync: false
+      - key: SUPERMEMORY_API_KEY
+        sync: false
+      - key: CHRONOS_MODE
+        value: demo

@@ -4,6 +4,8 @@
 
 Chronos listens to live callers, runs structured emergency intake, and guides a voice agent.
 
+Chronos is a Greek word referring to the personification of time as an unrelenting measurable force. Emergency intake is time-sensitive, saving a few seconds of call-time can save thousands of lives.
+
 > ⚠️  **Simulation only.**
 
 ## The Idea

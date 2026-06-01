@@ -1,10 +1,14 @@
 # Chronos 911 — Pipecat Cloud deployment (Twilio telephony)
-# Deploy: cd server && pc cloud secrets set chronos-911-secrets --file ../.env && pc cloud deploy
+#
+# From server/:
+#   uv run pipecatcloud auth login
+#   make deploy-secrets
+#   make deploy-cloud
+#
+# Then configure Twilio with: make pipecat-twiml ORG=your-org-name
 
 agent_name = "chronos-911"
 secret_set = "chronos-911-secrets"
-image = "chronos-911:latest"
-entry = "bot-chronos.py"
 agent_profile = "agent-1x"
 
 [krisp_viva]
@@ -12,3 +16,10 @@ audio_filter = "tel"
 
 [scaling]
 min_agents = 1
+
+[build]
+context_dir = "."
+dockerfile = "Dockerfile"
+
+[build.exclude]
+patterns = ["scripts/", "test_*.py", "*.md", "bot-gpt.py", "bot-nemotron.py", "mock_backend.py"]

@@ -402,6 +402,27 @@
       border-radius: 8px;
       flex-shrink: 0;
     }
+    .live-view .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    #call-select {
+      min-width: 220px;
+      max-width: 320px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    #call-select:focus {
+      outline: 2px solid rgba(78,163,255,.35);
+      border-color: rgba(78,163,255,.45);
+    }
     @media (max-width: 960px) {
       body.live-view { overflow: auto; }
       .live-main {
@@ -428,6 +449,9 @@
     <div class="status">
       <span id="dot" class="dot"></span>
       <span id="conn">connecting…</span>
+      <select id="call-select" title="Select which call to monitor">
+        <option value="">Auto — latest active call</option>
+      </select>
       <a href="/" class="pill" style="text-decoration:none;color:var(--accent)">← Full dashboard</a>
       <button id="reset-btn" class="pill" style="cursor:pointer;background:var(--panel);border:1px solid var(--line);color:var(--muted)" onclick="doReset()">↺ Reset</button>
     </div>

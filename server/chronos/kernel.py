@@ -142,6 +142,9 @@ class ChronosKernel:
             with open(tmp, "w") as f:
                 json.dump(payload, f)
             tmp.replace(config.RUNTIME_DIR / "live.json")
+            from chronos.remote_sync import push_live_state
+
+            push_live_state(payload)
         except Exception:
             pass
 
